@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/binary"
 	"fmt"
 )
 /*
@@ -57,10 +58,13 @@ var (
 )
 
 type Robot struct {
-	ID    uint16
-	C4    []uint8 // max 4 byte
-	Wing  uint8
-	WingLv []byte // 4 byte
+	ID      uint16
+	C4      []uint8 // max 4 byte
+	Wing    uint8
+	WingLv  []byte // 4 byte
+	Sess    uint32 // uint32
+	Lv      uint8
+	Exp     uint32
 }
 
 func (r *Robot) GetBytes(pos int) []byte {
@@ -98,6 +102,15 @@ func (r *Robot) GetBytes(pos int) []byte {
 	buf[148] = r.Wing
 	copy(buf[149:153], r.WingLv)
 
+	//binary.LittleEndian.PutUint64(buf[78:86], (uint64(pos) << 32) + uint64(100))
+	binary.LittleEndian.PutUint32(buf[78:82], r.Sess)
+
+	// LV
+	buf[16] = r.Lv
+
+	// Exp
+	binary.LittleEndian.PutUint32(buf[132:136], r.Exp)
+
 	return buf
 }
 
@@ -114,8 +127,12 @@ func setC(cid uint8, buf[]byte) {
 func NewBot(id uint16) (*Robot) {
 	r := &Robot{
 		ID: id,
-		Wing: 5,
 		C4: []uint8{0xFF, 0xFF, 0xFF, 0xFF},
+		Lv: 13,
+		Exp: 12345,
+		Sess: 0,
+		Wing: 0,
+		WingLv: []byte{0x00, 0x00, 0x00, 0x00},
 	}
 
 	return r
@@ -124,7 +141,10 @@ func NewBot(id uint16) (*Robot) {
 func botPrint(a []byte) {
 	wing, wingLV := a[148], a[149:153]
 	c1, c2, c3, c4 := a[138:140], a[140:142], a[142:144], a[144:146]
-	out := fmt.Sprintf("[id] %X,[pos] %d, [%dc] %X|%X|%X|%X, [w%d] %v", a[0:2], a[4], a[136], c1, c2, c3, c4, wing, wingLV)
+	lv := a[16]
+	session := binary.LittleEndian.Uint32(a[78:82])
+	exp := binary.LittleEndian.Uint32(a[132:136])
+	out := fmt.Sprintf("[id] %X,[pos] %d, [%dc] %X|%X|%X|%X, [w%d] %v, [lv] %d, [exp] %d, [sess] %d", a[0:2], a[4], a[136], c1, c2, c3, c4, wing, wingLV, lv, exp, session)
 	fmt.Println(out)
 }
 

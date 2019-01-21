@@ -196,8 +196,25 @@ func readData() ([]byte, error) {
 		var C4 []byte = []byte{0xFF, 0xFF, 0xFF, 0xFF}
 		var wing uint8 = 0
 		var wingLv []byte = []byte{0x00, 0x00, 0x00, 0x00}
+		var Lv uint8 = 13
+		var exp uint32 = 12345
+		var sess uint32 = 66666
 
 		switch len(fields) {
+		case 7:
+			tmp, _ := strconv.ParseUint(fields[6], 10, 32)
+			sess = uint32(tmp)
+			fallthrough
+		case 6:
+			tmp, _ := strconv.ParseUint(fields[5], 10, 32)
+			exp = uint32(tmp)
+			fallthrough
+		case 5:
+			tmp, _ := strconv.ParseUint(fields[4], 10, 8)
+			if tmp >= 1 && tmp <= 13 {
+				Lv = uint8(tmp)
+			}
+			fallthrough
 		case 4:
 			wingLv, _ = hex.DecodeString(fields[3])
 			fallthrough
@@ -218,12 +235,14 @@ func readData() ([]byte, error) {
 			Vln(1, "[open]?!!")
 		}
 
-		bot := &Robot{
-			ID: rid,
-			Wing: wing,
-			WingLv: wingLv,
-			C4: C4,
-		}
+		bot := NewBot(rid)
+		bot.C4 = C4
+		bot.Lv = Lv
+		bot.Exp = exp
+		bot.Sess = sess
+		bot.Wing = wing
+		bot.WingLv = wingLv
+
 
 		Vf(4, "[dbg][open]%04X, %04X, %d, %04X\n", rid, C4, wing, wingLv)
 		Vf(4, "[dbg][open]%v, %X", bot, bot.GetBytes(idx))
