@@ -81,7 +81,7 @@ func (h rawHeader) String() string {
 	return fmt.Sprintf("[%03d][%04d][%04d]", h.Cmd(), h.Length(), h.Unknown() )
 }
 
-func readFrame(conn io.ReadWriteCloser, buffer []byte) (f Frame, err error) {
+func readFrame(conn io.ReadCloser, buffer []byte) (f Frame, err error) {
 	if _, err := io.ReadFull(conn, buffer[:headerSize]); err != nil {
 		return f, errors.New("readFrame: " + err.Error())
 	}
@@ -100,7 +100,7 @@ func readFrame(conn io.ReadWriteCloser, buffer []byte) (f Frame, err error) {
 }
 
 
-func writeRawFrame(conn io.ReadWriteCloser, dataHex string) (n int, err error) {
+func writeRawFrame(conn io.WriteCloser, dataHex string) (n int, err error) {
 	nospace := SpaceStringsBuilder(dataHex)
 	data, err := hex.DecodeString(nospace)
 	if err != nil {
