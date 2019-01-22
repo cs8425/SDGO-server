@@ -60,7 +60,7 @@ func newFrame2(unk uint16) Frame {
 }
 
 func (f Frame) String() string {
-	return fmt.Sprintf("[%02X][%04d][%04X]%v", f.cmd, len(f.data), f.unk, f.rawData )
+	return fmt.Sprintf("[%02X][%04d][%04X]% 02X", f.cmd, len(f.data), f.unk, f.rawData )
 }
 
 type rawHeader []byte
