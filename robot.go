@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"sync"
 )
 /*
 機動2/中彈       26 77
@@ -74,7 +75,7 @@ func (r *Robot) GetBytes(pos int) []byte {
 	buf[0] = byte(r.ID & 0xFF)
 	buf[1] = byte((r.ID >> 8) & 0xFF)
 
-	buf[4] = uint8(pos+1) // TODO: mote than 252?
+	buf[4] = uint8(pos+1) // TODO: more than 252?
 
 	cc := len(r.C4)
 	if cc >= 4 {
@@ -102,7 +103,7 @@ func (r *Robot) GetBytes(pos int) []byte {
 	buf[148] = r.Wing
 	copy(buf[149:153], r.WingLv)
 
-	//binary.LittleEndian.PutUint64(buf[78:86], (uint64(pos) << 32) + uint64(100))
+
 	binary.LittleEndian.PutUint32(buf[78:82], r.Sess)
 
 	// LV
@@ -150,6 +151,7 @@ func botPrint(a []byte) {
 
 
 type Grid struct {
+	mx       sync.RWMutex
 	Robot    []*Robot
 	buf      [][]byte
 }
@@ -162,10 +164,21 @@ func NewGrid() (*Grid) {
 }
 
 func (g *Grid) Add(bot *Robot) {
+	g.mx.Lock()
 	g.Robot = append(g.Robot, bot)
+	g.mx.Unlock()
+}
+
+func (g *Grid) Claer() {
+	g.mx.Lock()
+	g.Robot = make([]*Robot, 0)
+	g.mx.Unlock()
 }
 
 func (g *Grid) BuildCached() {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
 	g.buf = make([][]byte, 0)
 
 	allbuf := make([][]byte, 0)
@@ -188,6 +201,9 @@ func (g *Grid) BuildCached() {
 }
 
 func (g *Grid) GetPage(p int) ([]byte) {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+
 	if p < len(g.buf) {
 		return g.buf[p]
 	}

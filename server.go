@@ -147,8 +147,35 @@ func main() {
 	log.SetFlags(log.Ldate|log.Ltime)
 	flag.Parse()
 
-	readData()
+	readyCh := make(chan struct{}, 1)
+	go func() {
+		stdin := bufio.NewReader(os.Stdin)
 
+		for {
+			err := readData()
+			if err != nil {
+				Vf(1, "Read Data Error: %v\n\n", err)
+				continue
+			}
+			select {
+			case readyCh <- struct{}{}:
+			default:
+			}
+
+
+			_, err = stdin.ReadString('\n')
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	<- readyCh
+
+	srvStart()
+}
+
+func srvStart() {
 	ln, err := net.Listen("tcp", *localAddr)
 	if err != nil {
 		Vln(2, "[server]Error listening:", err)
@@ -168,16 +195,25 @@ func main() {
 	}
 }
 
-func readData() ([]byte, error) {
+func readData() (error) {
 	af, err := os.Open(*userData)
 	if err != nil {
 		Vln(2, "[open]", err)
-		return nil, err
+		return err
 	}
 	defer af.Close()
 
+	grid2 := NewGrid()
+
 	idx := 0
 	r := bufio.NewReader(af)
+	b, err := r.Peek(3)
+	if err != nil {
+		return err
+	}
+	if b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		r.Discard(3)
+	}
 	for {
 		line, err := r.ReadString('\n')
 		if err != nil {
@@ -192,13 +228,15 @@ func readData() ([]byte, error) {
 			continue
 		}
 
+		Vln(4, "[dbg]", fields)
+
 		var rid uint16 = 0x4286
 		var C4 []byte = []byte{0xFF, 0xFF, 0xFF, 0xFF}
 		var wing uint8 = 0
 		var wingLv []byte = []byte{0x00, 0x00, 0x00, 0x00}
 		var Lv uint8 = 13
 		var exp uint32 = 12345
-		var sess uint32 = 66666
+		var sess uint32 = 23333
 
 		switch len(fields) {
 		case 7:
@@ -248,32 +286,30 @@ func readData() ([]byte, error) {
 		Vf(4, "[dbg][open]%v, %X", bot, bot.GetBytes(idx))
 		idx += 1
 
-		grid.Add(bot)
+		grid2.Add(bot)
 	}
 
-	grid.BuildCached()
+	grid2.BuildCached()
+	grid = grid2
 
 	Vln(4, "[dbg][grid]", len(grid.Robot), len(grid.buf))
-	return nil, nil
+	return nil
 }
 
 
 func Vf(level int, format string, v ...interface{}) {
 	if level <= *verbosity {
 		log.Printf(format, v...)
-//		fmt.Printf(format, v...)
 	}
 }
 func V(level int, v ...interface{}) {
 	if level <= *verbosity {
 		log.Print(v...)
-//		fmt.Print(v...)
 	}
 }
 func Vln(level int, v ...interface{}) {
 	if level <= *verbosity {
 		log.Println(v...)
-//		fmt.Println(v...)
 	}
 }
 
