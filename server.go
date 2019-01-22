@@ -19,10 +19,13 @@ import (
 //	"sync"
 )
 
-var localAddr = flag.String("l", ":4003", "")
-var verbosity = flag.Int("v", 3, "verbosity")
+var (
+	VERSION = "SELFBUILD" // injected by buildflags
 
-var userData = flag.String("d", "robot.txt", "data for list")
+	localAddr = flag.String("l", ":4003", "")
+	verbosity = flag.Int("v", 3, "verbosity")
+	userData = flag.String("d", "robot.txt", "data for list")
+)
 
 var grid = NewGrid()
 
@@ -159,7 +162,7 @@ func handleConn(p1 net.Conn) {
 func page(p1 net.Conn, f Frame) {
 	page := int(f.data[6])
 	buf := grid.GetPage(page)
-	Vf(2, "[page]%d, %X\n", page, buf)
+	Vf(2, "[page]%d, % 02X\n", page, buf)
 	if buf != nil {
 		writeRawFrame(p1, "9D 03 F0 03 26 08 85 35 00 00 06")
 		p1.Write(buf)
@@ -170,6 +173,8 @@ func page(p1 net.Conn, f Frame) {
 func main() {
 	log.SetFlags(log.Ldate|log.Ltime)
 	flag.Parse()
+
+	Vln(1, "[server] version =", VERSION)
 
 	readyCh := make(chan struct{}, 1)
 	go func() {
