@@ -109,6 +109,15 @@ func writeRawFrame(conn io.WriteCloser, dataHex string) (n int, err error) {
 	return conn.Write(data)
 }
 
+func Raw2Byte(dataHex string) ([]byte) {
+	nospace := SpaceStringsBuilder(dataHex)
+	data, err := hex.DecodeString(nospace)
+	if err != nil {
+		return nil
+	}
+	return data
+}
+
 func SpaceStringsBuilder(str string) string {
 	var b strings.Builder
 	b.Grow(len(str))
