@@ -284,8 +284,8 @@ func (g *Grid) BuildCachedAll() {
 	defer g.mx.Unlock()
 
 	size := len(g.Robot)
-	allbuf := make([]byte, 0, 11 + 25*size)
-	allbuf = append(allbuf, []byte{0x8B, 0x03, 0xF0, 0x03, 0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
+	allbuf := make([]byte, 0, 7 + 25*size)
+	allbuf = append(allbuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
 	for idx, bot := range g.Robot {
 		buf := bot.GetBytes2(idx)
 		botPrint25B(buf)

@@ -109,6 +109,20 @@ func writeRawFrame(conn io.WriteCloser, dataHex string) (n int, err error) {
 	return conn.Write(data)
 }
 
+func writeFrame(conn io.WriteCloser, data []byte) (n int, err error) {
+	size := len(data)
+	buf := make([]byte, 4, 4+size)
+	binary.LittleEndian.PutUint16(buf[0:2], uint16(size))
+	buf[2] = 0xF0
+	buf[3] = 0x03
+
+	_, err = conn.Write(buf)
+	if err != nil {
+		return
+	}
+	return conn.Write(data)
+}
+
 func Raw2Byte(dataHex string) ([]byte) {
 	nospace := SpaceStringsBuilder(dataHex)
 	data, err := hex.DecodeString(nospace)
