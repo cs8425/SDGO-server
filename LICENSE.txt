@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-rewrite from "SDGO單機版" made by "Kenneth Xu",
+rewrite from "SDGO單機版" made by "Kenneth Xu", "ChenHao",
 Original License of the code:
 /*
  * Copyright 2002-2013 the original author or authors.
