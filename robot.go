@@ -84,6 +84,15 @@ var (
 // [82:86] or [82:84]  外掛技能?, ID待查
 // [16] 等級  Ex == 0x0D (13)
 // [132:136] 經驗值
+
+	IJ = []byte{0xC5, 0x3A, 0x00, 0x00, 0x1A, 0x14, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0C, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x48, 0x43, 0x00, 0x00}
+// len() == 25
+// [0:2] >> ID
+// [23] 合成次數(0~5)
+// [24] 合成亮度
+// [15] 技能
+// [16] 戰艦
+// [17] 上鎖
 )
 
 type Robot struct {
@@ -157,6 +166,32 @@ func setC(cid uint8, buf[]byte) {
 	}
 }
 
+func (r *Robot) GetBytes2(pos int) []byte {
+	buf := make([]byte, 25, 25)
+	copy(buf, IJ)
+
+	buf[0] = byte(r.ID & 0xFF)
+	buf[1] = byte((r.ID >> 8) & 0xFF)
+
+	buf[12] = uint8(pos+1) // TODO: more than 252?
+
+
+	buf[23] = r.Wing
+	buf[24] = r.WingLv[0]
+
+	// skill
+	buf[15] = 0 // r.Skill
+
+	// ship
+	buf[16] = 0
+
+	// lock
+	buf[17] = 0
+
+	return buf
+}
+
+
 func NewBot(id uint16) (*Robot) {
 	r := &Robot{
 		ID: id,
@@ -182,17 +217,28 @@ func botPrint(a []byte) {
 	fmt.Println(out)
 }
 
+func botPrint25B(a []byte) {
+	wing, wingLV := a[23], a[24]
+	skill := a[15]
+	ship := a[16]
+	lock := a[17]
+	out := fmt.Sprintf("[id] %X, [pos] %d, [w%d] %v, [ship] %d, [skill] %d, [lock] %d", a[0:2], a[12], wing, wingLV, ship, skill, lock)
+	fmt.Println(out)
+}
 
 type Grid struct {
 	mx       sync.RWMutex
 	Robot    []*Robot
 	buf      [][]byte
+
+	bufAll   []byte // 25 byte * N
 }
 
 func NewGrid() (*Grid) {
 	return &Grid{
 		Robot: make([]*Robot, 0),
 		buf: make([][]byte, 0),
+		bufAll: make([]byte, 0),
 	}
 }
 
@@ -233,6 +279,22 @@ func (g *Grid) BuildCached() {
 	}
 }
 
+func (g *Grid) BuildCachedAll() {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	size := len(g.Robot)
+	allbuf := make([]byte, 0, 11 + 25*size)
+	allbuf = append(allbuf, []byte{0x8B, 0x03, 0xF0, 0x03, 0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
+	for idx, bot := range g.Robot {
+		buf := bot.GetBytes2(idx)
+		botPrint25B(buf)
+		allbuf = append(allbuf, buf...)
+	}
+
+	g.bufAll = allbuf
+}
+
 func (g *Grid) GetPage(p int) ([]byte) {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
@@ -241,6 +303,13 @@ func (g *Grid) GetPage(p int) ([]byte) {
 		return g.buf[p]
 	}
 	return nil
+}
+
+func (g *Grid) GetAll() ([]byte) {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+
+	return g.bufAll
 }
 
 
