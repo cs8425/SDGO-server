@@ -25,6 +25,7 @@ var (
 	localAddr = flag.String("l", ":4003", "")
 	verbosity = flag.Int("v", 3, "verbosity")
 	userData = flag.String("d", "robot.txt", "data for list")
+	extraData = flag.String("e", "extra.txt", "extra data for testing")
 )
 
 var grid = NewGrid()
@@ -331,14 +332,17 @@ func main() {
 			err := readData()
 			if err != nil {
 				Vf(1, "Read Data Error: %v\n\n", err)
-				continue
+				goto WAIT
 			}
+
+			readExtra()
+
 			select {
 			case readyCh <- struct{}{}:
 			default:
 			}
 
-
+		WAIT:
 			_, err = stdin.ReadString('\n')
 			if err != nil {
 				break
@@ -372,31 +376,18 @@ func srvStart() {
 }
 
 func readData() (error) {
-	af, err := os.Open(*userData)
+	lines, err := readFile(*userData)
 	if err != nil {
 		Vln(2, "[open]", err)
 		return err
 	}
-	defer af.Close()
 
 	grid2 := NewGrid()
 
 	idx := 0
-	r := bufio.NewReader(af)
-	b, err := r.Peek(3)
-	if err != nil {
-		return err
-	}
-	if b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
-		r.Discard(3)
-	}
-	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			break
-		}
+	for _, line := range lines {
 
-		fields := strings.Split(strings.Trim(line, "\n\r"), "\t")
+		fields := strings.Split(line, "\t")
 		if fields[0] == "" {
 			continue
 		}
@@ -536,6 +527,102 @@ func readUser(d []string) {
 	}
 }
 
+func readFile(path string) ([]string, error) {
+	af, err := os.Open(path)
+	if err != nil {
+		Vln(2, "[open]", err)
+		return nil, err
+	}
+	defer af.Close()
+
+	data := make([]string, 0)
+	r := bufio.NewReader(af)
+	b, err := r.Peek(3)
+	if err != nil {
+		return nil, err
+	}
+	if b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		r.Discard(3)
+	}
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			break
+		}
+
+		line = strings.Trim(line, "\n\r\t")
+		data = append(data, line)
+	}
+
+	Vln(6, "[dbg][file]", data)
+	return data, nil
+}
+
+func readExtra() (error) {
+	lines, err := readFile(*extraData)
+	if err != nil {
+		Vln(2, "[extra]", err)
+		return err
+	}
+
+	tab := make(map[string][]byte)
+	tmpName := ""
+	tmpVal := ""
+	for _, line := range lines {
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		Vln(6, "[dbg]", line)
+		if strings.HasPrefix(line, "$") {
+			tmpName = strings.Trim(line, "${ ")
+			continue
+		}
+		if strings.HasPrefix(line, "}") {
+			buf := Raw2Byte(tmpVal)
+			tmpVal = ""
+			if buf == nil {
+				Vf(2, "[dbg][extra]%v decode error!!\n", tmpName)
+				continue
+			}
+			tab[tmpName] = buf
+			Vf(4, "[dbg][extra]%v = %v[% 02X]\n", tmpName, len(buf), buf)
+			continue
+		}
+
+		tmpVal += line
+	}
+
+	Vln(5, "[dbg][tab]", len(tab), tab)
+
+	// parse
+	for k, v := range tab {
+		switch k {
+		case "UNIT1":
+			if len(v) == len(WZC) {
+				copy(WZC, v)
+				Vf(3, "[extra]update %v[%d]\n", k, len(v))
+			}
+		case "UNIT2":
+			if len(v) == len(IJ) {
+				copy(IJ, v)
+				Vf(3, "[extra]update %v[%d]\n", k, len(v))
+			}
+		case "UserInfo001":
+			if len(v) == len(UserInfo001) {
+				copy(UserInfo001, v)
+				Vf(3, "[extra]update %v[%d]\n", k, len(v))
+			}
+		case "UserInfo002":
+			if len(v) == len(UserInfo002) {
+				copy(UserInfo002, v)
+				Vf(3, "[extra]update %v[%d]\n", k, len(v))
+			}
+		}
+	}
+
+	return nil
+}
 
 func Vf(level int, format string, v ...interface{}) {
 	if level <= *verbosity {
@@ -552,7 +639,5 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-
-
 
 
