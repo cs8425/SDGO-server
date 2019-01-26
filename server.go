@@ -77,9 +77,10 @@ func handleConn(p1 net.Conn) {
 				//p1.Write(logData2)
 				//p1.Write(logData3)
 				//writeRawFrame(p1, logData4)
-				buf := grid.GetAll()
+				//writeFrame(p1, grid.GetAll())
+				//writeFrame(p1, user.GetBytes1(grid))
 				Vf(4, "[logout]\n")
-				writeFrame(p1, buf)
+				writeFrame(p1, logoutPacket)
 			}
 
 		case cmdLOGIN: // login ID+pass
@@ -329,13 +330,13 @@ func main() {
 		stdin := bufio.NewReader(os.Stdin)
 
 		for {
+			readExtra()
+
 			err := readData()
 			if err != nil {
 				Vf(1, "Read Data Error: %v\n\n", err)
 				goto WAIT
 			}
-
-			readExtra()
 
 			select {
 			case readyCh <- struct{}{}:
@@ -618,6 +619,9 @@ func readExtra() (error) {
 				copy(UserInfo002, v)
 				Vf(3, "[extra]update %v[%d]\n", k, len(v))
 			}
+		case "LogoutData":
+			copy(logoutPacket, v)
+			Vf(3, "[extra]update %v[%d]\n", k, len(v))
 		}
 	}
 
