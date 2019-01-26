@@ -73,7 +73,7 @@ mv $OUT/server-win64.elf $OUT/server-win64.exe
 mv $OUT/server-x64.elf $OUT/server-linux-amd64.elf
 mv $OUT/server-arm7.elf $OUT/server-linux-arm7.elf
 
-cp robot.txt start-sdgo.bat $OUT
+cp robot.txt start-sdgo.bat extra.txt $OUT
 cp LICENSE.txt README.md $OUT
 mkdir -p $OUT/src
 cp *.go $OUT/src
