@@ -118,7 +118,8 @@ func (r *Robot) GetBytes(pos int) []byte {
 	buf[0] = byte(r.ID & 0xFF)
 	buf[1] = byte((r.ID >> 8) & 0xFF)
 
-	buf[4] = uint8(pos+1) // TODO: more than 252?
+	//buf[4] = uint8(pos+1) // TODO: more than 252?
+	binary.LittleEndian.PutUint16(buf[4:6], uint16(pos+1)) // need test!!
 
 	cc := len(r.C4)
 	if cc >= 4 {
@@ -178,7 +179,8 @@ func (r *Robot) GetBytes2(pos int) []byte {
 	buf[0] = byte(r.ID & 0xFF)
 	buf[1] = byte((r.ID >> 8) & 0xFF)
 
-	buf[12] = uint8(pos+1) // TODO: more than 252?
+	//buf[12] = uint8(pos+1) // TODO: more than 252?
+	binary.LittleEndian.PutUint16(buf[12:14], uint16(pos+1)) // need test!!
 
 
 	buf[23] = r.Wing
@@ -218,7 +220,8 @@ func botPrint(a []byte) {
 	session := binary.LittleEndian.Uint32(a[78:82])
 	exp := binary.LittleEndian.Uint32(a[132:136])
 	skill := a[82:86]
-	out := fmt.Sprintf("[id] %X,[pos] %d, [%dc] %X|%X|%X|%X, [w%d] %v, [lv] %d, [exp] %d, [sess] %d, [skill] %02X", a[0:2], a[4], a[136], c1, c2, c3, c4, wing, wingLV, lv, exp, session, skill)
+	pos := binary.LittleEndian.Uint16(a[4:6])
+	out := fmt.Sprintf("[id] %X,[pos] %d, [%dc] %X|%X|%X|%X, [w%d] %v, [lv] %d, [exp] %d, [sess] %d, [skill] %02X", a[0:2], pos, a[136], c1, c2, c3, c4, wing, wingLV, lv, exp, session, skill)
 	fmt.Println(out)
 }
 
@@ -227,7 +230,8 @@ func botPrint25B(a []byte) {
 	skill := a[15]
 	ship := a[16]
 	lock := a[17]
-	out := fmt.Sprintf("[id] %X, [pos] %d, [w%d] %v, [ship] %d, [skill] %d, [lock] %d", a[0:2], a[12], wing, wingLV, ship, skill, lock)
+	pos := binary.LittleEndian.Uint16(a[12:14])
+	out := fmt.Sprintf("[id] %X, [pos] %d, [w%d] %v, [ship] %d, [skill] %d, [lock] %d", a[0:2], pos, wing, wingLV, ship, skill, lock)
 	fmt.Println(out)
 }
 
@@ -315,6 +319,28 @@ func (g *Grid) GetAll() ([]byte) {
 	defer g.mx.RUnlock()
 
 	return g.bufAll
+}
+
+
+func (g *Grid) GetPageCount() ([]byte) {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+
+	buf := Raw2Byte("08 06 85 35 00 00 " + 
+	"0C 00 09 00 F0 03 18 0B 85 35 00 00 03 00 00")
+
+	// 機格數量(格數, 總數=24+N)
+	N := len(g.Robot) - 24
+	if N < 0 {
+		N = 0
+	}
+	if N % 6 != 0 {
+		N = (N / 6) + 1
+		N = N * 6
+	}
+	binary.LittleEndian.PutUint16(buf[6:8], uint16(N))
+
+	return buf
 }
 
 func (g *Grid) GetPos(p int) (*Robot) {
