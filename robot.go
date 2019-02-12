@@ -240,14 +240,14 @@ type Grid struct {
 	Robot    []*Robot
 	buf      [][]byte
 
-	bufAll   []byte // 25 byte * N
+	bufAll   [][]byte // (25 byte * 60 + header) * N
 }
 
 func NewGrid() (*Grid) {
 	return &Grid{
 		Robot: make([]*Robot, 0),
 		buf: make([][]byte, 0),
-		bufAll: make([]byte, 0),
+		bufAll: make([][]byte, 0),
 	}
 }
 
@@ -292,14 +292,44 @@ func (g *Grid) BuildCachedAll() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	size := len(g.Robot)
-	allbuf := make([]byte, 0, 7 + 25*size)
-	allbuf = append(allbuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
+	/*mkframe = func(size int, buf []byte) ([]byte) {
+		allbuf := make([]byte, 0, 7 + 25*size)
+		allbuf = append(allbuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
+		allbuf = append(allbuf, buf...)
+		return allbuf
+	}*/
+
+	allbuf := make([][]byte, 0)
+
+	// 編碼成機體
+	subbuf := make([][]byte, 0)
 	for idx, bot := range g.Robot {
 		buf := bot.GetBytes2(idx)
 		botPrint25B(buf)
-		allbuf = append(allbuf, buf...)
+		subbuf = append(subbuf, buf)
 	}
+
+Vf(4, "[cached]uint2 subbuf %d\n", len(subbuf))
+
+	// 分裝
+	SPLIT := 60
+	for i := 0; i<len(subbuf); i += SPLIT {
+		framebuf := make([]byte, 0, 7 + 25*SPLIT)
+		size := SPLIT
+		if size + i >= len(subbuf) {
+			size = len(subbuf) % SPLIT
+		}
+		framebuf = append(framebuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
+
+		for j := 0; j<size; j++ {
+			framebuf = append(framebuf, subbuf[i + j]...)
+		}
+
+Vf(4, "[cached]uint2 framebuf, %d, %d, [% 02X]\n", size, len(framebuf), framebuf)
+
+		allbuf = append(allbuf, framebuf)
+	}
+
 
 	g.bufAll = allbuf
 }
@@ -314,7 +344,7 @@ func (g *Grid) GetPage(p int) ([]byte) {
 	return nil
 }
 
-func (g *Grid) GetAll() ([]byte) {
+func (g *Grid) GetAll() ([][]byte) {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 

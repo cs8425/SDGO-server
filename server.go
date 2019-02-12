@@ -151,7 +151,9 @@ func handleConn(p1 net.Conn) {
 				// 機體清單
 				buf := grid.GetAll()
 				Vf(4, "[all][%04d]% 02X\n", len(buf), buf)
-				writeFrame(p1, buf)
+				for _, b := range buf {
+					writeFrame(p1, b)
+				}
 			}
 			// [21][0010][03F0]0A 00 F0 03 21 06 00 00 00 00 21 1C 00 00
 			if f.data[6] == byte(0x21) {
@@ -340,11 +342,14 @@ func main() {
 			readExtra()
 
 			err := readData()
+
+//buf := grid.GetAll()
+//Vf(4, "[dbg][%d][% 02X]\n", len(buf), buf)
+
 			if err != nil {
 				Vf(1, "Read Data Error: %v\n\n", err)
 				goto WAIT
 			}
-//Vf(1, "[dbg][%d][% 02X]\n", len(grid.GetPageCount()), grid.GetPageCount())
 
 			select {
 			case readyCh <- struct{}{}:

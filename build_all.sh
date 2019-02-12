@@ -4,7 +4,7 @@
 VERSION=`date -u +%Y%m%d%H%M`
 
 OUT="./output"
-OUTNAME="SDGO-6page-$VERSION.zip"
+OUTNAME="SDGO-Npage-$VERSION.zip"
 
 
 LDFLAGS="-X main.VERSION=$VERSION -s -w"
@@ -73,7 +73,7 @@ mv $OUT/server-win64.elf $OUT/server-win64.exe
 mv $OUT/server-x64.elf $OUT/server-linux-amd64.elf
 mv $OUT/server-arm7.elf $OUT/server-linux-arm7.elf
 
-cp robot.txt start-sdgo.bat extra.txt $OUT
+cp robot.txt start-sdgo.bat extra.txt robot-all.txt $OUT
 cp LICENSE.txt README.md $OUT
 mkdir -p $OUT/src
 cp *.go $OUT/src
