@@ -75,6 +75,32 @@ var (
 // len() == 153
 // [0:2] >> ID
 // [4]   >> 位置  uint8? uint16??
+
+// [6] 出擊狀態, 0無, 1出擊
+// [7] ???, = 1
+// [8] 機體資料庫自動編號(?
+// [9:11] ???
+// [11] ???, only 0 & 1
+
+
+// [16] 等級  Ex == 0x0D (13)
+// [24:25] ????
+// [78:82]  出戰場數
+// [82:86]  外掛技能?, ID待查
+
+// [46:48] 塗裝1
+// [48:50] 塗裝2
+// [50:52] 塗裝3
+// [52:54] 塗裝4
+// [54:56] 塗裝5
+// [56:58] 塗裝6
+// [58:60] 拋光
+// [60:64] 紋章1
+// [64:68] 紋章2
+// [68:72] 紋章3
+// [76:80] 電量(float32LE)
+
+// [132:136] 經驗值
 // [136] >> 特幾
 // [137] >> fix == 1
 // [138:140] 槽1
@@ -84,20 +110,19 @@ var (
 // [148] 合成次數(0~5)
 // [149] 合成亮度
 // [150:153] 合成百分比(直接對應%)
-// [78:82]  出戰場數
-// [82:86]  外掛技能?, ID待查
-// [16] 等級  Ex == 0x0D (13)
-// [132:136] 經驗值
 
 	IJ = []byte{0xC5, 0x3A, 0x00, 0x00, 0x1A, 0x14, 0x88, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x0C, 0x00, 0x01, 0x01, 0x00, 0x00, 0x00, 0x48, 0x43, 0x00, 0x00}
 // len() == 25
 // [0:2] >> ID
 // [12] 位置
-// [23] 合成次數(0~5)
-// [24] 合成亮度
 // [15] 技能
 // [16] 戰艦
 // [17] 上鎖
+
+// [19:23] 電量(float32LE)
+
+// [23] 合成次數(0~5)
+// [24] 合成亮度
 )
 
 type Robot struct {
@@ -108,7 +133,11 @@ type Robot struct {
 	Sess    uint32 // uint32
 	Lv      uint8
 	Exp     uint32
-	Skill   []byte // 2 or 4 byte
+	Skill   []byte // 4 byte
+
+	Polish  uint16
+	Color   []uint16 // 6 color
+	Coat    []uint32 // 3 Coat of Arms
 }
 
 func (r *Robot) GetBytes(pos int) []byte {
@@ -158,6 +187,21 @@ func (r *Robot) GetBytes(pos int) []byte {
 
 	// skill
 	copy(buf[82:86], r.Skill)
+
+	// Polish
+	binary.LittleEndian.PutUint16(buf[58:60], r.Polish)
+
+	// Color
+	for i, v := range r.Color {
+		i = 2*i
+		binary.LittleEndian.PutUint16(buf[46+i:48+i], v)
+	}
+
+	// Coat
+	for i, v := range r.Coat {
+		i = 4*i
+		binary.LittleEndian.PutUint32(buf[60+i:64+i], v)
+	}
 
 	return buf
 }
@@ -292,13 +336,6 @@ func (g *Grid) BuildCachedAll() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	/*mkframe = func(size int, buf []byte) ([]byte) {
-		allbuf := make([]byte, 0, 7 + 25*size)
-		allbuf = append(allbuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
-		allbuf = append(allbuf, buf...)
-		return allbuf
-	}*/
-
 	allbuf := make([][]byte, 0)
 
 	// 編碼成機體
@@ -312,7 +349,7 @@ func (g *Grid) BuildCachedAll() {
 Vf(4, "[cached]uint2 subbuf %d\n", len(subbuf))
 
 	// 分裝
-	SPLIT := 60
+	SPLIT := 64 // >= 64 cause crash
 	for i := 0; i<len(subbuf); i += SPLIT {
 		framebuf := make([]byte, 0, 7 + 25*SPLIT)
 		size := SPLIT
@@ -501,7 +538,8 @@ func (u *User) GetPageCount() ([]byte) {
 	defer u.Mx.RUnlock()
 
 	buf := Raw2Byte("08 06 85 35 00 00 " + 
-	"0C 00 09 00 F0 03 18 0B 85 35 00 00 03 00 00")
+	"0C 00 " + 
+	"09 00 F0 03 18 0B 85 35 00 00 03 00 00")
 
 	N := u.PageCount - 4
 	if N < 0 {

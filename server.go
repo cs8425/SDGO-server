@@ -9,9 +9,9 @@ import (
 
 //	"io"
 	"os"
-	"encoding/hex"
-	"strings"
-	"strconv"
+//	"encoding/hex"
+//	"strings"
+//	"strconv"
 	"bufio"
 
 //	"strconv"
@@ -25,11 +25,13 @@ var (
 	localAddr = flag.String("l", ":4003", "")
 	verbosity = flag.Int("v", 3, "verbosity")
 	userData = flag.String("d", "robot.txt", "data for list")
-	extraData = flag.String("e", "extra.txt", "extra data for testing")
+	extraData = flag.String("ex", "extra.txt", "extra data for testing")
+	eggPoolData = flag.String("egg", "egg.txt", "egg pool data")
 )
 
 var grid = NewGrid()
 var user = NewUser()
+var eggPool = NewEggPool()
 
 func handleConn(p1 net.Conn) {
 	defer p1.Close()
@@ -160,6 +162,17 @@ func handleConn(p1 net.Conn) {
 				writeRawFrame(p1, "28 03 F0 03 7F 07 00 00 00 00 1D 00 F2 63 01 00 E2 07 0C 00 0B 00 15 00 01 00 00 00 F3 63 01 00 E2 07 0C 00 0B 00 15 00 01 00 00 00 F6 63 01 00 E2 07 0C 00 10 00 0C 00 03 00 00 00 F7 63 01 00 E2 07 0C 00 10 00 0C 00 03 00 00 00 F8 63 01 00 E2 07 0C 00 10 00 08 00 03 00 00 00 FE 63 01 00 E2 07 0C 00 0C 00 13 00 01 00 00 00 FF 63 01 00 E2 07 0C 00 0C 00 13 00 01 00 00 00 00 64 01 00 E2 07 0C 00 0C 00 13 00 01 00 00 00 01 64 01 00 E2 07 0C 00 0C 00 11 00 01 00 00 00 02 64 01 00 E2 07 0C 00 0C 00 11 00 01 00 00 00 03 64 01 00 E2 07 0C 00 0C 00 11 00 01 00 00 00 04 64 01 00 E2 07 0C 00 0C 00 16 00 01 00 00 00 05 64 01 00 E2 07 0C 00 0C 00 17 00 01 00 00 00 06 64 01 00 E2 07 0C 00 0C 00 17 00 01 00 00 00 0A 64 01 00 E2 07 0C 00 0F 00 0C 00 02 00 00 00 0B 64 01 00 E2 07 0C 00 12 00 12 00 02 00 00 00 0C 64 01 00 E2 07 0C 00 16 00 0C 00 02 00 00 00 0D 64 01 00 E2 07 0C 00 16 00 0F 00 02 00 00 00 0E 64 01 00 E2 07 0C 00 17 00 11 00 02 00 00 00 0F 64 01 00 E2 07 0C 00 17 00 13 00 02 00 00 00 10 64 01 00 00 00 00 00 00 00 00 00 00 00 00 00 13 64 01 00 E2 07 0C 00 16 00 0B 00 03 00 00 00 15 64 01 00 E2 07 0C 00 15 00 0C 00 03 00 00 00 18 64 01 00 E2 07 0C 00 17 00 09 00 03 00 00 00 1A 64 01 00 E2 07 0C 00 1C 00 0F 00 03 00 00 00 1F 64 01 00 E3 07 01 00 03 00 09 00 03 00 00 00 24 64 01 00 E3 07 01 00 09 00 0B 00 03 00 00 00 29 64 01 00 00 00 00 00 00 00 00 00 01 00 00 00 58 64 01 00 E2 07 0C 00 0E 00 12 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 C0 A6 8A 06 00 00 00 00 00 00 00 00 C0 A6 8A 06 C0 A6 8A 06 54 93 DB 0F E4 32 33 01 80 33 33 01 B0 3C 71 01 C0 A6 8A 06 68 93 DB 0F E4 32 33 01 80 33 33 01 B0 3C 71 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 37 00 F0 03 26 0A 1C AE 00 00 E4 EC 00 00 00 0F 3C 93 DB 0F 94 93 DB 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 37 00 F0 03 26 0A 03 27 01 00 E4 EC 00 00 00 0F 3C 93 DB 0F 94 93 DB 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00");
 			}
 
+			// 0x0621
+			if f.data[1] == byte(0x06) && f.data[6] == 0 {
+				writeRawFrame(p1, "48 00 f0 03 c4 0a 4a 20 00 00 10 00 c5 09 00 00 29 0a 00 00 8d 0a 00 00 f1 0a 00 00 55 0b 00 00 b9 0b 00 00 1d 0c 00 00 81 0c 00 00 e5 0c 00 00 49 0d 00 00 ad 0d 00 00 11 0e 00 00 75 0e 00 00 d9 0e 00 00 3d 0f 00 00 a1 0f 00 00" )
+			}
+			if f.data[1] == byte(0x06) && f.data[6] == 0xA1 {
+				writeRawFrame(p1, "48 00 f0 03 c4 0a 4a 20 00 00 10 00 05 10 00 00 69 10 00 00 cd 10 00 00 31 11 00 00 95 11 00 00 f9 11 00 00 5d 12 00 00 c1 12 00 00 25 13 00 00 89 13 00 00 ed 13 00 00 51 14 00 00 b5 14 00 00 19 15 00 00 7d 15 00 00 e1 15 00 00")
+			}
+			if f.data[1] == byte(0x06) && f.data[6] == 0xE1 {
+				writeRawFrame(p1, "48 00 f0 03 c4 0a 4a 20 00 00 10 00 45 16 00 00 a9 16 00 00 0d 17 00 00 71 17 00 00 d5 17 00 00 39 18 00 00 9d 18 00 00 01 19 00 00 65 19 00 00 c9 19 00 00 2d 1a 00 00 91 1a 00 00 f5 1a 00 00 59 1b 00 00 bd 1b 00 00 21 1c 00 00")
+			}
+
 		case 0x90:
 			// [90][0010][03F0]0A 00 F0 03 90 0A 00 00 00 00 00 00 00 00
 			if f.data[6] == byte(0x00) {
@@ -177,6 +190,7 @@ func handleConn(p1 net.Conn) {
 			}
 
 		case 0x5A: // 訓練場 >> 機格page
+			// [5A][0010][03F0]0A 00 F0 03 5A 09 00 00 00 00 01 00 00 00
 			page(p1, f)
 // ----
 		case 0x58: // 好友搜尋
@@ -310,33 +324,17 @@ func handleConn(p1 net.Conn) {
 			if f.data[1] == byte(0x07) {
 				writeRawFrame(p1, "06 00 f0 03 22 06 4a 20 00 00")
 			}
+
+		case 0x5C:
+			writeRawFrame(p1, "48 00 f0 03 28 07 4a 20 00 00 0c 00 65 00 00 00 c9 00 00 00 2d 01 00 00 91 01 00 00 f5 01 00 00 59 02 00 00 bd 02 00 00 21 03 00 00 85 03 00 00 e9 03 00 00 4d 04 00 00 b1 04 00 00 4a 00 00 00 00 00 00 00 48 00 b0 06 03 00 00 00")
+
 		case 0x17: 
 			//[17][42][03F0]2A 00 F0 03 17 08 85 35 00 00 03 00 AE 3A 00 00 A7 3A 00 00 9B 3A 00 00 91 3E 00 00 93 3E 00 00 95 3E 00 00 00 00 00 00 00 00 00 00 01 08
 			fallthrough
-		case 0xb0, 0x1e: // 抽蛋(GP, 代幣)
-			var str string
-			num := rand.Intn(10000)
-			fmt.Println(num)
-			if num<3 {
-				str = "c5 3a"
-			}else
-			if num>=3&&num<=503{
-				str = "ED 2E"
-			}else
-			if num>=504&&num<=3504 {
-				str = "11 27"
-			}else
-			if num>=3504&&num<=6504 {
-				str = "F9 2A"
-			}else
-			if num>=6504&&num<=9504 {
-				str = "13 27"
-			}else{
-				str = "84 3e"
-			}
-
-			writeRawFrame(p1,"34 00 f0 03 53 0a 4a 20 00 00"+str+"00 00 80 25 00 00 00 00 00 00 5d 87 07 00 00 00 00 00 03 "+
-				str+"00 00 5d 87 07 00 00 00 00 00 0c 00 01 00 00 00 00 00 00 fa 44 00 00")
+		case 0xB0, 0x1E: // 抽蛋(GP, 代幣)
+			out := eggPool.GetOne()
+			Vln(4, "[egg]", out)
+			writeFrame(p1, BuildEggPack(out, user.GP))
 
 		default:
 			Vln(3, "[???]", f)
@@ -344,12 +342,18 @@ func handleConn(p1 net.Conn) {
 	}
 }
 
+var PageHead = Raw2Byte("9D 03 F0 03 26 08 85 35 00 00 06")
 func page(p1 net.Conn, f Frame) {
 	page := int(f.data[6]) // TODO: more than 255 page?
 	buf := grid.GetPage(page)
-	Vf(2, "[page]%d, % 02X\n", page, buf)
+	Vf(5, "[page]%d, % 02X\n", page, buf)
 	if buf != nil {
-		writeRawFrame(p1, "9D 03 F0 03 26 08 85 35 00 00 06")
+		//head := Raw2Byte("9D 03 F0 03 26 08 85 35 00 00 06")
+		head := make([]byte, len(PageHead), len(PageHead))
+		copy(head, PageHead)
+		Vf(4, "[page]%d, % 02X\n", page, head)
+
+		p1.Write(head)
 		p1.Write(buf)
 	}
 }
@@ -367,6 +371,7 @@ func main() {
 
 		for {
 			readExtra()
+			readEggPool()
 
 			err := readData()
 
@@ -416,268 +421,6 @@ func srvStart() {
 	}
 }
 
-func readData() (error) {
-	lines, err := readFile(*userData)
-	if err != nil {
-		Vln(2, "[open]", err)
-		return err
-	}
-
-	grid2 := NewGrid()
-
-	idx := 0
-	for _, line := range lines {
-
-		fields := strings.Split(line, "\t")
-		if fields[0] == "" {
-			continue
-		}
-		if strings.HasPrefix(fields[0], "#") {
-			continue
-		}
-
-		Vln(4, "[dbg]", fields)
-		if strings.HasPrefix(fields[0], "!!") {
-			readUser(fields)
-			continue
-		}
-
-		var rid uint16 = 0x4286
-		var C4 []byte = []byte{0xFF, 0xFF, 0xFF, 0xFF}
-		var wing uint8 = 0
-		var wingLv []byte = []byte{0x00, 0x00, 0x00, 0x00}
-		var Lv uint8 = 13
-		var exp uint32 = 12345
-		var sess uint32 = 23333
-		var skill []byte = []byte{0x00, 0x00, 0x00, 0x00}
-
-		switch len(fields) {
-		default:
-			fallthrough
-		case 8:
-			skill, _ = hex.DecodeString(fields[7])
-			fallthrough
-		case 7:
-			tmp, _ := strconv.ParseUint(fields[6], 10, 32)
-			sess = uint32(tmp)
-			fallthrough
-		case 6:
-			tmp, _ := strconv.ParseUint(fields[5], 10, 32)
-			exp = uint32(tmp)
-			fallthrough
-		case 5:
-			tmp, _ := strconv.ParseUint(fields[4], 10, 8)
-			if tmp >= 1 && tmp <= 13 {
-				Lv = uint8(tmp)
-			}
-			fallthrough
-		case 4:
-			wingLv, _ = hex.DecodeString(fields[3])
-			fallthrough
-		case 3:
-			tmp, _ := strconv.ParseUint(fields[2], 10, 8)
-			wing = uint8(tmp)
-			fallthrough
-		case 2:
-			C4, _ = hex.DecodeString(fields[1])
-			fallthrough
-		case 1:
-			tmp, _ := hex.DecodeString(fields[0])
-			if len(tmp) == 2 {
-				rid = (uint16(tmp[1]) << 8) | uint16(tmp[0])
-			}
-
-		case 0:
-			Vln(1, "[open]?!!")
-			continue
-		}
-
-		bot := NewBot(rid)
-		bot.C4 = C4
-		bot.Lv = Lv
-		bot.Exp = exp
-		bot.Sess = sess
-		bot.Wing = wing
-		bot.WingLv = wingLv
-		bot.Skill = skill
-
-
-		Vf(5, "[dbg][open]%04X, %04X, %d, %04X\n", rid, C4, wing, wingLv)
-		Vf(5, "[dbg][open]%v, %X", bot, bot.GetBytes(idx))
-		idx += 1
-
-		grid2.Add(bot)
-	}
-
-	grid2.BuildCached()
-	grid2.BuildCachedAll()
-
-	grid = grid2
-
-	Vln(4, "[dbg][grid]", len(grid.Robot), len(grid.buf))
-	Vln(4, "[dbg][user]", user)
-	return nil
-}
-
-func readUser(d []string) {
-	if len(d) < 3 {
-		return
-	}
-
-	val := d[2]
-	switch d[1] {
-	case "Name":
-		user.SetName(val)
-
-	case "GP":
-		tmp, err := strconv.ParseUint(val, 10, 32)
-		if err == nil {
-			user.Mx.Lock()
-			user.GP = uint32(tmp)
-			user.Mx.Unlock()
-		}
-
-	case "GO":
-		tmp, err := strconv.ParseUint(val, 10, 8)
-		if err == nil {
-			if tmp < 37 && tmp > 0 {
-				user.Mx.Lock()
-				user.GO = int(tmp)
-				user.Mx.Unlock()
-			}
-		}
-
-	case "SearchID":
-		var rid uint16 = 0x4286
-		tmp, _ := hex.DecodeString(val)
-		if len(tmp) == 2 {
-			rid = (uint16(tmp[1]) << 8) | uint16(tmp[0])
-		}
-		user.Mx.Lock()
-		user.SearchID = rid
-		user.Mx.Unlock()
-
-	case "SearchExp":
-		tmp, err := strconv.ParseUint(val, 10, 32)
-		if err == nil {
-			user.Mx.Lock()
-			user.SearchExp = uint32(tmp)
-			user.Mx.Unlock()
-		}
-
-	case "PageCount":
-		tmp, err := strconv.ParseUint(val, 10, 32)
-		if err == nil {
-			user.Mx.Lock()
-			user.PageCount = int(tmp)
-			user.Mx.Unlock()
-		}
-
-	default:
-		return
-	}
-}
-
-func readFile(path string) ([]string, error) {
-	af, err := os.Open(path)
-	if err != nil {
-		Vln(2, "[open]", err)
-		return nil, err
-	}
-	defer af.Close()
-
-	data := make([]string, 0)
-	r := bufio.NewReader(af)
-	b, err := r.Peek(3)
-	if err != nil {
-		return nil, err
-	}
-	if b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
-		r.Discard(3)
-	}
-	for {
-		line, err := r.ReadString('\n')
-		if err != nil {
-			break
-		}
-
-		line = strings.Trim(line, "\n\r\t")
-		data = append(data, line)
-	}
-
-	Vln(6, "[dbg][file]", data)
-	return data, nil
-}
-
-func readExtra() (error) {
-	lines, err := readFile(*extraData)
-	if err != nil {
-		Vln(2, "[extra]", err)
-		return err
-	}
-
-	tab := make(map[string][]byte)
-	tmpName := ""
-	tmpVal := ""
-	for _, line := range lines {
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		Vln(6, "[dbg]", line)
-		if strings.HasPrefix(line, "$") {
-			tmpName = strings.Trim(line, "${ ")
-			continue
-		}
-		if strings.HasPrefix(line, "}") {
-			buf := Raw2Byte(tmpVal)
-			tmpVal = ""
-			if buf == nil {
-				Vf(2, "[dbg][extra]%v decode error!!\n", tmpName)
-				continue
-			}
-			tab[tmpName] = buf
-			Vf(4, "[dbg][extra]%v = %v[% 02X]\n", tmpName, len(buf), buf)
-			continue
-		}
-
-		tmpVal += line
-	}
-
-	Vln(5, "[dbg][tab]", len(tab), tab)
-
-	// parse
-	for k, v := range tab {
-		switch k {
-		case "UNIT1":
-			if len(v) == len(WZC) {
-				copy(WZC, v)
-				Vf(3, "[extra]update %v[%d]\n", k, len(v))
-			}
-		case "UNIT2":
-			if len(v) == len(IJ) {
-				copy(IJ, v)
-				Vf(3, "[extra]update %v[%d]\n", k, len(v))
-			}
-		case "UserInfo001":
-			if len(v) == len(UserInfo001) {
-				copy(UserInfo001, v)
-				Vf(3, "[extra]update %v[%d]\n", k, len(v))
-			}
-		case "UserInfo002":
-			if len(v) == len(UserInfo002) {
-				copy(UserInfo002, v)
-				Vf(3, "[extra]update %v[%d]\n", k, len(v))
-			}
-		case "LogoutData":
-			copy(logoutPacket, v)
-			Vf(3, "[extra]update %v[%d]\n", k, len(v))
-		}
-	}
-
-	return nil
-}
-
 func Vf(level int, format string, v ...interface{}) {
 	if level <= *verbosity {
 		log.Printf(format, v...)
@@ -693,5 +436,3 @@ func Vln(level int, v ...interface{}) {
 		log.Println(v...)
 	}
 }
-
-
