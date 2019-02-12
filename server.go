@@ -133,7 +133,7 @@ func handleConn(p1 net.Conn) {
 				//writeRawFrame(p1, 
 				//"08 00 F0 03 08 06 85 35 00 00 " + 
 				//"0C 00 09 00 F0 03 18 0B 85 35 00 00 03 00 00")
-				writeFrame(p1, grid.GetPageCount())
+				writeFrame(p1, user.GetPageCount())
 			}
 			if f.data[6] == byte(0xF1) {
 				writeRawFrame(p1, 
@@ -310,6 +310,33 @@ func handleConn(p1 net.Conn) {
 			if f.data[1] == byte(0x07) {
 				writeRawFrame(p1, "06 00 f0 03 22 06 4a 20 00 00")
 			}
+		case 0x17: 
+			//[17][42][03F0]2A 00 F0 03 17 08 85 35 00 00 03 00 AE 3A 00 00 A7 3A 00 00 9B 3A 00 00 91 3E 00 00 93 3E 00 00 95 3E 00 00 00 00 00 00 00 00 00 00 01 08
+			fallthrough
+		case 0xb0, 0x1e: // 抽蛋(GP, 代幣)
+			var str string
+			num := rand.Intn(10000)
+			fmt.Println(num)
+			if num<3 {
+				str = "c5 3a"
+			}else
+			if num>=3&&num<=503{
+				str = "ED 2E"
+			}else
+			if num>=504&&num<=3504 {
+				str = "11 27"
+			}else
+			if num>=3504&&num<=6504 {
+				str = "F9 2A"
+			}else
+			if num>=6504&&num<=9504 {
+				str = "13 27"
+			}else{
+				str = "84 3e"
+			}
+
+			writeRawFrame(p1,"34 00 f0 03 53 0a 4a 20 00 00"+str+"00 00 80 25 00 00 00 00 00 00 5d 87 07 00 00 00 00 00 03 "+
+				str+"00 00 5d 87 07 00 00 00 00 00 0c 00 01 00 00 00 00 00 00 fa 44 00 00")
 
 		default:
 			Vln(3, "[???]", f)
@@ -318,7 +345,7 @@ func handleConn(p1 net.Conn) {
 }
 
 func page(p1 net.Conn, f Frame) {
-	page := int(f.data[6])
+	page := int(f.data[6]) // TODO: more than 255 page?
 	buf := grid.GetPage(page)
 	Vf(2, "[page]%d, % 02X\n", page, buf)
 	if buf != nil {
@@ -535,6 +562,14 @@ func readUser(d []string) {
 		if err == nil {
 			user.Mx.Lock()
 			user.SearchExp = uint32(tmp)
+			user.Mx.Unlock()
+		}
+
+	case "PageCount":
+		tmp, err := strconv.ParseUint(val, 10, 32)
+		if err == nil {
+			user.Mx.Lock()
+			user.PageCount = int(tmp)
 			user.Mx.Unlock()
 		}
 

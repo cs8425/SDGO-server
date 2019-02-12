@@ -417,6 +417,7 @@ type User struct {
 	GO         int // <= 36 (now)
 	SearchID   uint16
 	SearchExp  uint32
+	PageCount  int
 }
 
 func NewUser() (*User) {
@@ -425,6 +426,7 @@ func NewUser() (*User) {
 		GO: 1,
 		SearchID: 0x428F,
 		SearchExp: 0,
+		PageCount: 254,
 	}
 	u.SetName("Jack")
 	return u
@@ -433,7 +435,7 @@ func NewUser() (*User) {
 func (u *User) String() (string) {
 	u.Mx.RLock()
 	defer u.Mx.RUnlock()
-	str := fmt.Sprintf("Name: [% 02X], GP: %d, GO: %d, SearchID: %04X, SearchExp: %d", u.Name, u.GP, u.GO, u.SearchID, u.SearchExp)
+	str := fmt.Sprintf("Name: [% 02X], GP: %d, GO: %d, SearchID: %04X, SearchExp: %d, PageCount: %d\n", u.Name, u.GP, u.GO, u.SearchID, u.SearchExp, u.PageCount)
 	return str
 }
 
@@ -492,5 +494,23 @@ func (u *User) GetBytes2(name []byte) ([]byte) {
 	binary.LittleEndian.PutUint16(a[118:120], u.SearchID)
 
 	return a
+}
+
+func (u *User) GetPageCount() ([]byte) {
+	u.Mx.RLock()
+	defer u.Mx.RUnlock()
+
+	buf := Raw2Byte("08 06 85 35 00 00 " + 
+	"0C 00 09 00 F0 03 18 0B 85 35 00 00 03 00 00")
+
+	N := u.PageCount - 4
+	if N < 0 {
+		N = 0
+	}
+	N = N * 6
+
+	binary.LittleEndian.PutUint16(buf[6:8], uint16(N))
+
+	return buf
 }
 
