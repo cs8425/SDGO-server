@@ -12,11 +12,11 @@ import (
 )
 
 const ( // IDs  uint8? uint16?
-	cmdHERT        byte = 0x6F // 111 // HERTPACKET
-	cmdLOGIN       byte = 0x29 // 41  // login ID+pass //cmdLOGPACKET1
-	cmdLOGPACKET2  byte = 0x43 // 67  // ??
-	cmdLOGPACKET3  byte = 0x49 // 73  // ??
-	cmdLOGPACKET4  byte = 0x4D // 77  // ??
+	cmdHERT        uint16 = 0x1F6F // HERTPACKET
+	cmdLOGIN       uint16 = 0x2329 // login ID+pass //cmdLOGPACKET1
+	cmdLOGPACKET2  byte = 0x43 // ??
+	cmdLOGPACKET3  byte = 0x49 // ??
+	cmdLOGPACKET4  byte = 0x4D // ??
 )
 
 var ( // dump data
@@ -42,28 +42,28 @@ var ( // dump data
 const (
 	sizeOfLength   = 2
 	sizeOfUnknown  = 2
-	sizeOfCmd      = 1
+	sizeOfCmd      = 2
 	headerSize     = sizeOfLength + sizeOfUnknown + sizeOfCmd
 )
 
 // Frame defines a packet from or to be multiplexed into a single connection
 type Frame struct {
-	cmd  byte
+	cmd  uint16
 	unk  uint16
 	data []byte
 	rawData []byte
 }
 
-func newFrame(cmd byte, unk uint16) Frame {
-	return Frame{cmd: cmd, unk: unk}
+func newFrame(cmd uint16) Frame {
+	return Frame{cmd: cmd, unk: 0x03F0}
 }
 
-func newFrame2(unk uint16) Frame {
-	return Frame{unk: unk}
+func newFrame2() Frame {
+	return Frame{unk: 0x03F0}
 }
 
 func (f Frame) String() string {
-	return fmt.Sprintf("[%02X][%04d][%04X]% 02X", f.cmd, len(f.data), f.unk, f.rawData )
+	return fmt.Sprintf("[%04X][%04d][%04X]% 02X", f.cmd, len(f.data), f.unk, f.rawData )
 }
 
 type rawHeader []byte
@@ -76,12 +76,12 @@ func (h rawHeader) Unknown() uint16 {
 	return binary.LittleEndian.Uint16(h[2:])
 }
 
-func (h rawHeader) Cmd() byte {
-	return h[4]
+func (h rawHeader) Cmd() uint16 {
+	return binary.LittleEndian.Uint16(h[4:])
 }
 
 func (h rawHeader) String() string {
-	return fmt.Sprintf("[%02X][%04d][%04d]", h.Cmd(), h.Length(), h.Unknown() )
+	return fmt.Sprintf("[%04X][%04d][%04d]", h.Cmd(), h.Length(), h.Unknown() )
 }
 
 func readFrame(conn io.ReadCloser, buffer []byte) (f Frame, err error) {
@@ -92,13 +92,15 @@ func readFrame(conn io.ReadCloser, buffer []byte) (f Frame, err error) {
 	dec := rawHeader(buffer)
 	f.cmd = dec.Cmd()
 	f.unk = dec.Unknown()
-	if length := dec.Length() - 1; length > 0 {
+	length := dec.Length() - sizeOfCmd
+	if length > 0 {
 		if _, err := io.ReadFull(conn, buffer[headerSize:headerSize+length]); err != nil {
 			return f, errors.New("readFrame: " + err.Error())
 		}
-		f.data = buffer[headerSize - 1 : headerSize+length]
-		f.rawData = buffer[0 : headerSize+length]
 	}
+	f.data = buffer[headerSize - sizeOfCmd : headerSize+length]
+	f.rawData = buffer[0 : headerSize+length]
+
 	return f, nil
 }
 
@@ -139,7 +141,7 @@ func SpaceStringsBuilder(str string) string {
 	var b strings.Builder
 	b.Grow(len(str))
 	for _, ch := range str {
-		if ch != ' ' {
+		if ch != ' ' && ch != '\n' {
 			b.WriteRune(ch)
 		}
 	}
