@@ -282,14 +282,14 @@ type Grid struct {
 	Robot []*Robot
 	buf   [][]byte
 
-	bufAll [][]byte // (25 byte * 60 + header) * N
+	bufAll []byte // 25 byte * N + header, max(N) = 63
 }
 
 func NewGrid() *Grid {
 	return &Grid{
 		Robot:  make([]*Robot, 0),
 		buf:    make([][]byte, 0),
-		bufAll: make([][]byte, 0),
+		bufAll: make([]byte, 0),
 	}
 }
 
@@ -334,7 +334,7 @@ func (g *Grid) BuildCachedAll() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	allbuf := make([][]byte, 0)
+/*	allbuf := make([][]byte, 0)
 
 	// 編碼成機體
 	subbuf := make([][]byte, 0)
@@ -365,7 +365,23 @@ func (g *Grid) BuildCachedAll() {
 		allbuf = append(allbuf, framebuf)
 	}
 
-	g.bufAll = allbuf
+	g.bufAll = allbuf*/
+
+	size := len(g.Robot)
+	if size > 63 {
+		size = 63
+	}
+	subbuf := make([]byte, 0, 7+25*size)
+	subbuf = append(subbuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
+	for idx, bot := range g.Robot {
+		if idx > 63 {
+			break
+		}
+		buf := bot.GetBytes2(idx)
+		botPrint25B(buf)
+		subbuf = append(subbuf, buf...)
+	}
+	g.bufAll = subbuf
 }
 
 func (g *Grid) GetPage(p int) []byte {
@@ -377,7 +393,7 @@ func (g *Grid) GetPage(p int) []byte {
 	return nil
 }
 
-func (g *Grid) GetAll() [][]byte {
+func (g *Grid) GetAll() []byte {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
@@ -409,7 +425,6 @@ func (g *Grid) GetPos(p int) *Robot {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
 
-	p -= 1
 	if p > 0 && p < len(g.Robot) {
 		return g.Robot[p]
 	}
@@ -446,7 +461,7 @@ type User struct {
 	Mx        sync.RWMutex
 	Name      []byte // 1 + 16 Byte
 	GP        uint32 // uint32LE
-	GO        int    // <= 36 (now)
+	GO        int // start from 1
 	SearchID  uint16
 	SearchExp uint32
 	PageCount int
@@ -497,7 +512,7 @@ func (u *User) GetBytes1(g *Grid) []byte {
 	// Name
 	copy(a[8:25], u.Name)
 
-	bot := g.GetPos(u.GO)
+	bot := g.GetPos(u.GO - 1)
 	if bot != nil {
 		binary.LittleEndian.PutUint16(a[81:83], bot.ID)
 		a[85] = uint8(u.GO)
