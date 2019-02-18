@@ -41,6 +41,18 @@ func NewEggPool() (*EggPool) {
 	}
 }
 
+func (e *EggPool) String() string {
+	e.mx.Lock()
+	defer e.mx.Unlock()
+
+	str := "{\n"
+	for _, item := range e.list {
+		str += fmt.Sprintf("%v\n", item)
+	}
+	str += "}\n"
+	return str
+}
+
 func (e *EggPool) Add(id uint16, c uint8, p int) {
 	e.mx.Lock()
 	defer e.mx.Unlock()

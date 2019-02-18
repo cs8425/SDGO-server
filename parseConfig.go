@@ -1,4 +1,3 @@
-// go build server.go frame.go robot.go
 package main
 
 import (
@@ -13,8 +12,6 @@ import (
 	"strings"
 	"strconv"
 	"bufio"
-
-//	"strconv"
 //	"time"
 //	"sync"
 )
@@ -28,7 +25,7 @@ func readData() (error) {
 
 	grid2 := NewGrid()
 
-	idx := 0
+	idx := 1
 	for _, line := range lines {
 
 		fields := strings.Split(line, "\t")
@@ -52,7 +49,7 @@ func readData() (error) {
 		var Lv uint8 = 13
 		var exp uint32 = 12345
 		var sess uint32 = 23333
-		var skill []byte = []byte{0x00, 0x00, 0x00, 0x00}
+		var skill uint32 = 0
 		var polish uint16 = 0
 		var color []uint16 = []uint16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}
 		var coat []uint32 = []uint32{0x00000000, 0x00000000, 0x00000000}
@@ -62,41 +59,32 @@ func readData() (error) {
 		default:
 			fallthrough
 		case 18: // 紋章
-			tmp, _ := strconv.ParseUint(fields[17], 16, 32)
-			coat[2] = uint32(tmp)
+			coat[2] = parseUint32LE(fields[17], 16, 0)
 			fallthrough
 		case 17:
-			tmp, _ := strconv.ParseUint(fields[16], 16, 32)
-			coat[1] = uint32(tmp)
+			coat[1] = parseUint32LE(fields[16], 16, 0)
 			fallthrough
 		case 16:
-			tmp, _ := strconv.ParseUint(fields[15], 16, 32)
-			coat[0] = uint32(tmp)
+			coat[0] = parseUint32LE(fields[15], 16, 0)
 			fallthrough
 
 		case 15: // 塗裝
-			tmp, _ := strconv.ParseUint(fields[14], 16, 16)
-			color[5] = uint16(tmp)
+			color[5] = parseColor(fields[14], 0)
 			fallthrough
 		case 14:
-			tmp, _ := strconv.ParseUint(fields[13], 16, 16)
-			color[4] = uint16(tmp)
+			color[4] = parseColor(fields[13], 0)
 			fallthrough
 		case 13:
-			tmp, _ := strconv.ParseUint(fields[12], 16, 16)
-			color[3] = uint16(tmp)
+			color[3] = parseColor(fields[12], 0)
 			fallthrough
 		case 12:
-			tmp, _ := strconv.ParseUint(fields[11], 16, 16)
-			color[2] = uint16(tmp)
+			color[2] = parseColor(fields[11], 0)
 			fallthrough
 		case 11:
-			tmp, _ := strconv.ParseUint(fields[10], 16, 16)
-			color[1] = uint16(tmp)
+			color[1] = parseColor(fields[10], 0)
 			fallthrough
 		case 10:
-			tmp, _ := strconv.ParseUint(fields[9], 16, 16)
-			color[0] = uint16(tmp)
+			color[0] = parseColor(fields[9], 0)
 			fallthrough
 
 		case 9: // 拋光
@@ -104,7 +92,7 @@ func readData() (error) {
 			polish = uint16(tmp)
 			fallthrough
 		case 8:
-			skill, _ = hex.DecodeString(fields[7])
+			skill = parseUint32LE(fields[7], 16, 0)
 			fallthrough
 		case 7:
 			tmp, _ := strconv.ParseUint(fields[6], 10, 32)
@@ -142,6 +130,8 @@ func readData() (error) {
 		}
 
 		bot := NewBot(rid)
+		bot.UUID = uint64(idx) + 0xADDE0000
+		bot.Pos = uint16(idx)
 		bot.C4 = C4
 		bot.Lv = Lv
 		bot.Exp = exp
@@ -152,21 +142,23 @@ func readData() (error) {
 		bot.Polish = polish
 		bot.Color = color
 		bot.Coat = coat
+		bot.Charge = 2000
+		//bot.Lock = true
 
-
-		Vf(5, "[dbg][open]%04X, %04X, %d, %04X\n", rid, C4, wing, wingLv)
+		Vf(5, "[dbg][open]%04X, %04X, %d, %04X, %04X\n", rid, C4, wing, wingLv, color)
 		//Vf(7, "[dbg][open]%v, %X", bot, bot.GetBytes(idx))
 		idx += 1
 
 		grid2.Add(bot)
 	}
 
+	grid2.SetGoPos(user.GO)
 	grid2.BuildCached()
 	grid2.BuildCachedAll()
 
-	grid = grid2
+	user.Grid = grid2
 
-	Vln(4, "[dbg][grid]", len(grid.Robot), len(grid.buf))
+	Vln(4, "[dbg][grid]", len(user.Grid.Robot), len(user.Grid.buf))
 	Vln(4, "[dbg][user]", user)
 	return nil
 }
@@ -281,6 +273,25 @@ func readEggPool() (error) {
 	eggPool = eggPool2
 	Vln(4, "[dbg][eggpool]", eggPool)
 	return nil
+}
+
+func parseColor(str string, def uint16) (out uint16) {
+	tmp, err := strconv.ParseUint(str, 16, 32)
+	if err != nil {
+		return def
+	}
+	out = uint16((tmp & 0xFF) >> 3) // B
+	out |= uint16(((tmp >> 8) & 0xFF) >> 3) << 5 // G
+	out |= uint16(((tmp >> 16) & 0xFF) >> 3) << 10 // R
+	return out
+}
+
+func parseUint32LE(str string, hex int, def uint32) (uint32) {
+	tmp, err := strconv.ParseUint(str, hex, 32)
+	if err != nil {
+		return def
+	}
+	return uint32(tmp)
 }
 
 func readFile(path string) ([]string, error) {

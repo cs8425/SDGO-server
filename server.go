@@ -9,6 +9,7 @@ import (
 
 	//	"io"
 	"os"
+	"encoding/binary"
 	//	"encoding/hex"
 	//	"strings"
 	//	"strconv"
@@ -28,7 +29,6 @@ var (
 	eggPoolData = flag.String("egg", "egg.txt", "egg pool data")
 )
 
-var grid = NewGrid()
 var user = NewUser()
 var eggPool = NewEggPool()
 
@@ -99,19 +99,22 @@ func handleUser(p1 *Client, buffer []byte) {
 			p1.Write(buf)
 
 			// 登入頁面ok
-			// [6B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 01 00 00 00
+			// [076B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 01 00 00 00
 
 			// 進入我的房間
-			// [6B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 02 00 00 00
+			// [076B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 02 00 00 00
 
 			// 進入任務頻道
-			// [6B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 03 00 00 00
+			// [076B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 03 00 00 00
+
+			// 進入抽蛋
+			// [076B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 07 00 00 00
 
 			// 進入勳章
-			// [6B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 0C 00 00 00
+			// [076B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 0C 00 00 00
 
 			// 右上角X
-			// [6B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 0A 00 00 00
+			// [076B][0010][03F0]0A 00 F0 03 6B 07 00 00 00 00 0A 00 00 00
 			// TODO: 有資料要重傳, 會卡loading
 			if f.data[6] == byte(0x0A) {
 				Vf(4, "[logout]\n")
@@ -262,7 +265,7 @@ func handleUser(p1 *Client, buffer []byte) {
 
 		case 0x0740: // 初始訊息? 出擊機體
 			// [0740][0006][03F0]06 00 F0 03 40 07 00 00 00 00
-			p1.WriteFrame(user.GetBytes1(grid))
+			p1.WriteFrame(user.GetInfo1Bytes())
 
 			// ----
 		case 0x07E8:
@@ -333,12 +336,9 @@ func handleUser(p1 *Client, buffer []byte) {
 				p1.WriteRawFrame("09 00 01 00 00 00 EF 63 01 00 E2 07 0C 00 0A 00 09 00 01 00 00 00 F0 63 01 00 E2 07 0C 00 0A 00 09 00 01 00 00 00 F1 63 01 00 E2 07 0C 00 0A 00 0C 00 01 00 00 00 ")
 
 				// 機體清單
-				buf := grid.GetAll()
+				buf := user.Grid.GetAll()
 				Vf(4, "[all][%04d]% 02X\n", len(buf), buf)
 				p1.WriteFrame(buf)
-				//for _, b := range buf {
-				//	p1.WriteFrame(b)
-				//}
 			}
 			// [0621][0010][03F0]0A 00 F0 03 21 06 00 00 00 00 21 1C 00 00
 			if f.data[6] == byte(0x21) {
@@ -412,11 +412,11 @@ FE 11 35 00 FF 11 35 00 00 12 35 00 `)
 				"0E 00 F0 03 AD 07 00 00 00 00 8E 23 68 24 23 00 00 00")
 
 		case 0x0860:
-			//p1.WriteRawFrame(
-			//"16 00 F0 03 2C 07 85 35 00 00 E3 07 01 00 0D 00 14 00 05 00 1E 00 0B 01 00 00 " +
-			//"0A 00 F0 03 43 06 85 35 00 00 33 C2 EB 0B")
 			p1.WriteRawFrame(
-				"16 00 F0 03 2C 07 A9 19 00 00 E2 07 0C 00 01 00 11 00 0C 00 11 00 62 00 00 00")
+			"16 00 F0 03 2C 07 85 35 00 00 E3 07 01 00 0D 00 14 00 05 00 1E 00 0B 01 00 00 " +
+			"0A 00 F0 03 43 06 85 35 00 00 33 C2 EB 0B")
+			//p1.WriteRawFrame(
+			//"16 00 F0 03 2C 07 A9 19 00 00 E2 07 0C 00 01 00 11 00 0C 00 11 00 62 00 00 00")
 
 		case 0x080E:
 			p1.WriteRawFrame(
@@ -518,10 +518,10 @@ FE 11 35 00 FF 11 35 00 00 12 35 00 `)
 			// --- 抽蛋
 		case 0x085C:
 			// [5C][0010][03F0]0A 00 F0 03 5C 08 00 00 00 00 00 00 00 00
-			//p1.WriteRawFrame("48 00 f0 03 28 07 4a 20 00 00 0c 00 65 00 00 00 c9 00 00 00 2d 01 00 00 91 01 00 00 f5 01 00 00 59 02 00 00 bd 02 00 00 21 03 00 00 85 03 00 00 e9 03 00 00 4d 04 00 00 b1 04 00 00 4a 00 00 00 00 00 00 00 48 00 b0 06 03 00 00 00")
-			p1.WriteRawFrame(`
-0E 00 F0 03 EE 08 A9 19 00 00 E2 07 0C 00 01 00 11 00 
-16 00 F0 03 2C 07 A9 19 00 00 E2 07 0C 00 01 00 11 00 0C 00 11 00 62 00 00 00`)
+			p1.WriteRawFrame("48 00 f0 03 28 07 4a 20 00 00 0c 00 65 00 00 00 c9 00 00 00 2d 01 00 00 91 01 00 00 f5 01 00 00 59 02 00 00 bd 02 00 00 21 03 00 00 85 03 00 00 e9 03 00 00 4d 04 00 00 b1 04 00 00 4a 00 00 00 00 00 00 00 48 00 b0 06 03 00 00 00")
+			//p1.WriteRawFrame(
+			//"0E 00 F0 03 EE 08 A9 19 00 00 E2 07 0C 00 01 00 11 00 " + 
+			//"16 00 F0 03 2C 07 A9 19 00 00 E2 07 0C 00 01 00 11 00 0C 00 11 00 62 00 00 00")
 
 		case 0x071E, 0x05B0, 0x0817: // 抽蛋(代幣, GP, 自訂)
 			// (代幣) [1E][0010][03F0]0A 00 F0 03 1E 07 00 00 00 00 62 09 00 00
@@ -541,17 +541,15 @@ FE 11 35 00 FF 11 35 00 00 12 35 00 `)
 			//p1.WriteRawFrame("16 00 F0 03 2C 07 98 6D 00 00 E2 07 0C 00 16 00 0F 00 2A 00 22 00 EF 01 00 00")
 			//page(p1)
 
-		case 0x060C:
-			// [060C][0014][03F0]0E 00 F0 03 0C 06 00 00 00 00 5C 27 30 01 00 00 00 00
-			// [060C][0014][03F0]0E 00 F0 03 0C 06 00 00 00 00 19 F3 99 01 00 00 00 00 ???
-			pos := user.GO - 1
-			if pos < 0 {
-				pos = 0
-			}
-			bot := grid.GetPos(pos)
+		case 0x060C: // 設定出擊機體
+			// [060C][0014][03F0]0E 00 F0 03 0C 06 00 00 00 00 [5C 27 30 01 00 00 00 00]
+			// [060C][0014][03F0]0E 00 F0 03 0C 06 00 00 00 00 [19 F3 99 01 00 00 00 00] ???
+			uuid := binary.LittleEndian.Uint64(f.data[6:14])
+			Vf(5, "[setGO]UUID = %02X\n", uuid)
+			user.Grid.SetGoUUID(uuid)
+			bot := user.Grid.GetGo()
 			if bot != nil {
-				buf := bot.GetBytes(pos)
-				buf[6] = 0x01 // hack
+				buf := bot.GetBytes()
 				buf = append(Raw2Byte("72 05 00 00 00 00 00 00 "), buf...)
 				p1.WriteFrame(buf)
 			} else {
@@ -587,13 +585,13 @@ func oldFormat(p1 *Client, f Frame) {
 var PageHead = Raw2Byte("9D 03 F0 03 26 08 85 35 00 00 06")
 func page(p1 *Client) {
 	//返回全机库，机库可超10页
-	for i := 0; i < len(grid.buf); i++ {
+	for i := 0; i < len(user.Grid.buf); i++ {
 		writePage(p1, i)
 	}
 }
 
 func writePage(p1 *Client, page int) {
-	buf := grid.GetPage(page)
+	buf := user.Grid.GetPage(page)
 	Vf(5, "[page]%d, % 02X\n", page, buf)
 	if buf != nil {
 		//head := Raw2Byte("9D 03 F0 03 26 08 85 35 00 00 06")
@@ -621,7 +619,7 @@ func main() {
 
 			err := readData()
 
-			//buf := grid.GetAll()
+			//buf := user.Grid.GetAll()
 			//Vf(4, "[dbg][%d][% 02X]\n", len(buf), buf)
 
 			if err != nil {

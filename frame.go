@@ -46,7 +46,7 @@ const (
 	headerSize     = sizeOfLength + sizeOfUnknown + sizeOfCmd
 )
 
-// Frame defines a packet from or to be multiplexed into a single connection
+// Frame defines a packet for SDGO client
 type Frame struct {
 	cmd  uint16
 	unk  uint16

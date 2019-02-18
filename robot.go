@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sync"
+	"math"
 )
 
 /*
@@ -72,21 +73,17 @@ FF240100	底力爆發(X)
 
 */
 var (
-	WZC = []byte{0x8F, 0x42, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x01, 0x5C, 0x27, 0x30, 0x01, 0x00, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC8, 0x44, 0x29, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE2, 0x07, 0x0C, 0x00, 0x1D, 0x00, 0x10, 0x00, 0x0A, 0x00, 0x3A, 0x00, 0xC0, 0x85, 0x5D, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFD, 0x40, 0x00, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
+	WZC = []byte{0x8F, 0x42, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x01, 0x5C, 0x27, 0x30, 0x01, 0x02, 0x03, 0x04, 0x05, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC8, 0x44, 0x29, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE2, 0x07, 0x0C, 0x00, 0x1D, 0x00, 0x10, 0x00, 0x0A, 0x00, 0x3A, 0x00, 0xC0, 0x85, 0x5D, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFD, 0x40, 0x00, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	// len() == 153
 	// [0:2] >> ID
-	// [4]   >> 位置  uint8? uint16??
+	// [4]   >> 位置  uint16
 
 	// [6] 出擊狀態, 0無, 1出擊
 	// [7] ???, = 1
-	// [8] 機體資料庫自動編號(?
-	// [9:11] ???
-	// [11] ???, only 0 & 1
+	// [8:16] 機體資料庫自動編號(選定出擊用)
 
 	// [16] 等級  Ex == 0x0D (13)
 	// [24:25] ????
-	// [78:82]  出戰場數
-	// [82:86]  外掛技能?, ID待查
 
 	// [46:48] 塗裝1
 	// [48:50] 塗裝2
@@ -98,11 +95,16 @@ var (
 	// [60:64] 紋章1
 	// [64:68] 紋章2
 	// [68:72] 紋章3
-	// [76:80] 電量(float32LE)
+	// [74:78] 電量 float32LE
+
+	// [78:82]  出戰場數
+	// [82:86]  外掛技能?, ID待查
+
+	// [86:102] 取得時間: 年,月,日,時,分,秒,奈秒(4 byte)
 
 	// [132:136] 經驗值
 	// [136] >> 特幾
-	// [137] >> fix == 1
+	// [137] >> 上鎻, 0無, 1鎖
 	// [138:140] 槽1
 	// [140:142] 槽2
 	// [142:144] 槽3
@@ -128,28 +130,57 @@ var (
 
 type Robot struct {
 	ID     uint16
+	Pos    uint16
+	UUID   uint64
+
+	Lock   bool
+	Active bool
+
 	C4     []uint8 // max 4 byte
 	Wing   uint8
 	WingLv []byte // 4 byte
-	Sess   uint32 // uint32
+	Sess   uint32
 	Lv     uint8
 	Exp    uint32
-	Skill  []byte // 4 byte
+	Skill  uint32
 
 	Polish uint16
 	Color  []uint16 // 6 color
 	Coat   []uint32 // 3 Coat of Arms
+
+	Charge uint16 // 0~2000, step = 100
+
+	mx    sync.RWMutex // lock for build/read cache
+	cache []byte // for packet
 }
 
-func (r *Robot) GetBytes(pos int) []byte {
+func (r *Robot) GetBytes() []byte {
 	buf := make([]byte, len(WZC), len(WZC))
 	copy(buf, WZC)
 
 	buf[0] = byte(r.ID & 0xFF)
 	buf[1] = byte((r.ID >> 8) & 0xFF)
 
-	//buf[4] = uint8(pos+1) // TODO: more than 252?
-	binary.LittleEndian.PutUint16(buf[4:6], uint16(pos+1)) // need test!!
+	// Pos
+	binary.LittleEndian.PutUint16(buf[4:6], r.Pos)
+
+	// UUID
+	binary.LittleEndian.PutUint64(buf[8:16], r.UUID)
+
+	// lock
+	if r.Lock {
+		buf[137] = 1
+	} else {
+		buf[137] = 0
+	}
+
+	// Active
+	if r.Active {
+		buf[6] = 1
+	} else {
+		buf[6] = 0
+	}
+
 
 	cc := len(r.C4)
 	if cc >= 4 {
@@ -186,7 +217,7 @@ func (r *Robot) GetBytes(pos int) []byte {
 	binary.LittleEndian.PutUint32(buf[132:136], r.Exp)
 
 	// skill
-	copy(buf[82:86], r.Skill)
+	binary.LittleEndian.PutUint32(buf[82:86], r.Skill)
 
 	// Polish
 	binary.LittleEndian.PutUint16(buf[58:60], r.Polish)
@@ -203,6 +234,11 @@ func (r *Robot) GetBytes(pos int) []byte {
 		binary.LittleEndian.PutUint32(buf[60+i:64+i], v)
 	}
 
+	// Charge
+	bits := math.Float32bits(float32(r.Charge))
+	binary.LittleEndian.PutUint32(buf[74:78], bits)
+	//binary.Write(buf[74:78], binary.LittleEndian, float32(r.Charge))
+
 	return buf
 }
 
@@ -216,15 +252,15 @@ func setC(cid uint8, buf []byte) {
 	}
 }
 
-func (r *Robot) GetBytes2(pos int) []byte {
+func (r *Robot) GetBytes2() []byte {
 	buf := make([]byte, len(IJ), len(IJ))
 	copy(buf, IJ)
 
 	buf[0] = byte(r.ID & 0xFF)
 	buf[1] = byte((r.ID >> 8) & 0xFF)
 
-	//buf[12] = uint8(pos+1) // TODO: more than 252?
-	binary.LittleEndian.PutUint16(buf[12:14], uint16(pos+1)) // need test!!
+	// Pos
+	binary.LittleEndian.PutUint16(buf[12:14], r.Pos)
 
 	buf[23] = r.Wing
 	buf[24] = r.WingLv[0]
@@ -236,7 +272,16 @@ func (r *Robot) GetBytes2(pos int) []byte {
 	buf[16] = 0
 
 	// lock
-	buf[17] = 0
+	if r.Lock {
+		buf[17] = 1
+	} else {
+		buf[17] = 0
+	}
+
+	// Charge
+	bits := math.Float32bits(float32(r.Charge))
+	binary.LittleEndian.PutUint32(buf[19:23], bits)
+	//binary.Write(buf[74:78], binary.LittleEndian, float32(r.Charge))
 
 	return buf
 }
@@ -263,7 +308,9 @@ func botPrint(a []byte) {
 	exp := binary.LittleEndian.Uint32(a[132:136])
 	skill := a[82:86]
 	pos := binary.LittleEndian.Uint16(a[4:6])
-	out := fmt.Sprintf("[id] %X,[pos] %d, [%dc] %X|%X|%X|%X, [w%d] %v, [lv] %d, [exp] %d, [sess] %d, [skill] %02X", a[0:2], pos, a[136], c1, c2, c3, c4, wing, wingLV, lv, exp, session, skill)
+	polish := binary.LittleEndian.Uint16(a[58:60])
+	color := fmt.Sprintf("[color]%04X|%04X|%04X|%04X|%04X|%04X", binary.LittleEndian.Uint16(a[46:48]), binary.LittleEndian.Uint16(a[48:50]), binary.LittleEndian.Uint16(a[50:52]), binary.LittleEndian.Uint16(a[52:54]), binary.LittleEndian.Uint16(a[54:56]), binary.LittleEndian.Uint16(a[56:58]))
+	out := fmt.Sprintf("[id] %X,[pos] %d, [%dc] %X|%X|%X|%X, [w%d] %v, [lv] %d, [exp] %d, [sess] %d, [skill] %02X, [Polish] %d%%, %v", a[0:2], pos, a[136], c1, c2, c3, c4, wing, wingLV, lv, exp, session, skill, polish, color)
 	fmt.Println(out)
 }
 
@@ -278,31 +325,108 @@ func botPrint25B(a []byte) {
 }
 
 type Grid struct {
-	mx    sync.RWMutex
-	Robot []*Robot
-	buf   [][]byte
+	mx          sync.RWMutex
+	Robot       []*Robot
+	uuid2Robot  map[uint64]*Robot
+	pos2Robot   map[uint16]*Robot
+	//page2Robot  [][6]*Robot
+	GO          uint16
 
+	buf   [][]byte
 	bufAll []byte // 25 byte * N + header, max(N) = 63
 }
 
 func NewGrid() *Grid {
-	return &Grid{
-		Robot:  make([]*Robot, 0),
+	g := &Grid{
+		GO:     1,
 		buf:    make([][]byte, 0),
 		bufAll: make([]byte, 0),
 	}
+	g.Claer()
+
+	return g
 }
 
 func (g *Grid) Add(bot *Robot) {
 	g.mx.Lock()
-	g.Robot = append(g.Robot, bot)
+	g.add(bot)
 	g.mx.Unlock()
+}
+
+func (g *Grid) add(bot *Robot) {
+	g.Robot = append(g.Robot, bot)
+	uuid := bot.UUID
+	pos := bot.Pos
+	g.uuid2Robot[uuid] = bot
+	g.pos2Robot[pos] = bot
+}
+
+func (g *Grid) AddPos(bot *Robot, pos int) {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	bot.Pos = uint16(pos)
+	g.add(bot)
 }
 
 func (g *Grid) Claer() {
 	g.mx.Lock()
+	defer g.mx.Unlock()
+
 	g.Robot = make([]*Robot, 0)
-	g.mx.Unlock()
+	g.uuid2Robot = make(map[uint64]*Robot)
+	g.pos2Robot = make(map[uint16]*Robot)
+	//g.page2Robot = make([][6]*Robot, 0, 4)
+}
+
+func (g *Grid) SetGoUUID(uuid uint64) {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	bot, ok := g.uuid2Robot[uuid]
+	if !ok {
+		return // UUID not found
+	}
+
+	act := g.pos2Robot[g.GO]
+	act.Active = false
+
+	bot.Active = true
+	g.GO = bot.Pos
+}
+
+func (g *Grid) SetGoPos(pos int) {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	bot, ok := g.pos2Robot[uint16(pos)]
+	if !ok {
+		return // pos not found
+	}
+
+	act := g.pos2Robot[g.GO]
+	act.Active = false
+
+	bot.Active = true
+	g.GO = uint16(pos)
+}
+
+func (g *Grid) GetPos(pos int) *Robot {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+
+	bot, ok := g.pos2Robot[uint16(pos)]
+	if !ok {
+		return nil
+	}
+	return bot
+}
+
+func (g *Grid) GetGo() *Robot {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	return g.pos2Robot[g.GO]
 }
 
 func (g *Grid) BuildCached() {
@@ -312,8 +436,8 @@ func (g *Grid) BuildCached() {
 	g.buf = make([][]byte, 0)
 
 	allbuf := make([][]byte, 0)
-	for idx, bot := range g.Robot {
-		buf := bot.GetBytes(idx)
+	for _, bot := range g.Robot {
+		buf := bot.GetBytes()
 		botPrint(buf)
 		allbuf = append(allbuf, buf)
 	}
@@ -334,39 +458,6 @@ func (g *Grid) BuildCachedAll() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-/*	allbuf := make([][]byte, 0)
-
-	// 編碼成機體
-	subbuf := make([][]byte, 0)
-	for idx, bot := range g.Robot {
-		buf := bot.GetBytes2(idx)
-		botPrint25B(buf)
-		subbuf = append(subbuf, buf)
-	}
-
-	Vf(4, "[cached]uint2 subbuf %d\n", len(subbuf))
-
-	// 分裝
-	SPLIT := 64 // >= 64 cause crash
-	for i := 0; i < len(subbuf); i += SPLIT {
-		framebuf := make([]byte, 0, 7+25*SPLIT)
-		size := SPLIT
-		if size+i >= len(subbuf) {
-			size = len(subbuf) % SPLIT
-		}
-		framebuf = append(framebuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
-
-		for j := 0; j < size; j++ {
-			framebuf = append(framebuf, subbuf[i+j]...)
-		}
-
-		Vf(4, "[cached]uint2 framebuf, %d, %d, [% 02X]\n", size, len(framebuf), framebuf)
-
-		allbuf = append(allbuf, framebuf)
-	}
-
-	g.bufAll = allbuf*/
-
 	size := len(g.Robot)
 	if size > 63 {
 		size = 63
@@ -377,7 +468,7 @@ func (g *Grid) BuildCachedAll() {
 		if idx > 63 {
 			break
 		}
-		buf := bot.GetBytes2(idx)
+		buf := bot.GetBytes2()
 		botPrint25B(buf)
 		subbuf = append(subbuf, buf...)
 	}
@@ -400,45 +491,15 @@ func (g *Grid) GetAll() []byte {
 	return g.bufAll
 }
 
-func (g *Grid) GetPageCount() []byte {
-	g.mx.RLock()
-	defer g.mx.RUnlock()
-
-	buf := Raw2Byte("08 06 85 35 00 00 " +
-		"0C 00 09 00 F0 03 18 0B 85 35 00 00 03 00 00")
-
-	// 機格數量(格數, 總數=24+N)
-	N := len(g.Robot) - 24
-	if N < 0 {
-		N = 0
-	}
-	if N%6 != 0 {
-		N = (N / 6) + 1
-		N = N * 6
-	}
-	binary.LittleEndian.PutUint16(buf[6:8], uint16(N))
-
-	return buf
-}
-
-func (g *Grid) GetPos(p int) *Robot {
-	g.mx.RLock()
-	defer g.mx.RUnlock()
-
-	if p > 0 && p < len(g.Robot) {
-		return g.Robot[p]
-	}
-	return nil
-}
-
 var (
 	UserInfo001 = Raw2Byte("A6 06 85 35 00 00 00 00 " +
 		"10 4A 61 63 6B 30 31 32 33 34 35 36 37 38 39 30 31 " + // [4]"Jack", max = 16 byte
 		"00 00 00 00 00 00 00 00 00 00 00 00 00 00 0D 00 00 00 01 00 00 00 15 B9 13 00 86 30 00 00 " +
 		"F6 C2 01 00 " + // GP
 		"C0 5D 00 00 01 0A 00 00 00 00 00 00 00 00 01 00 00 00 00 00 00 00 " +
-		// "75 42" 出擊機體!!!
-		"8F 42 00 00 01 00 01 01 19 F3 99 01 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FA 44 00 00 00 00 00 00 00 00 E3 07 01 00 0E 00 0C 00 1D 00 2C 00 C0 7A F2 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 63 0F 03 00 00 00 00 00 00 00 03 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FA 56 00 00 00 00 00 00 61 EA 00 00 91 76 12 00 01 00 00 01 63 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 E2 07 0C 00 02 00 0C 00 04 00 33 00 40 BD A9 17 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 23 0B 04 00 00 00 00 00 04 00 4E C7 00 00 BF 00 4D 24 14 00 E5 1D 00 00 00 00 00 00 85 35 00 00 B5 1E 04 00 33 C1 1D 00 00 80 D4 44 04 00 00 00 1A 14 88 00 00 00 00 00 B1 3A 00 00 C5 3A 00 00 00 00 00 00 00 00 00 00 87 CC DD 00 00 00 00 00 1A 14 88 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 B1 3A 00 00 11 00 01 01 87 CC DD 00 00 00 00 00 09 00 00 00 00 00 00 00 2C 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 8C 31 80 01 80 01 39 67 01 00 80 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 14 00 00 00 00 00 00 00 E2 07 0C 00 14 00 09 00 0D 00 10 00 C0 45 1B 11 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 EC 09 00 00 03 01 28 77 30 77 26 77 00 00 01 00 00 00 00 00 00 C5 3A 00 00 01 00 01 01 1A 14 88 00 00 00 00 00 0C 00 00 00 00 00 00 00 F1 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 DF 7B E8 18 AF 29 E8 18 5E 57 7F 63 3C 00 6C AA 03 00 65 AA 03 00 63 AA 03 00 00 00 00 00 48 43 7A 00 00 00 00 00 00 00 E2 07 0C 00 0A 00 09 00 2B 00 0B 00 C0 55 70 33 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 03 01 32 77 31 77 30 77 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 3A 00 00 00 E8 03 00 00")
+		// "75 42 00 00 20" 出擊機體!!! == 機體資料格式(153 byte)
+		"8F 42 00 00 01 00 01 01 19 F3 99 01 00 00 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 FA 44 00 00 00 00 00 00 00 00 E3 07 01 00 0E 00 0C 00 1D 00 2C 00 C0 7A F2 04 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 63 0F 03 00 00 00 00 00 00 00 03 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 " + 
+		"FA 56 00 00 00 00 00 00 61 EA 00 00 91 76 12 00 01 00 00 01 63 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 E2 07 0C 00 02 00 0C 00 04 00 33 00 40 BD A9 17 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 23 0B 04 00 00 00 00 00 04 00 4E C7 00 00 BF 00 4D 24 14 00 E5 1D 00 00 00 00 00 00 85 35 00 00 B5 1E 04 00 33 C1 1D 00 00 80 D4 44 04 00 00 00 1A 14 88 00 00 00 00 00 B1 3A 00 00 C5 3A 00 00 00 00 00 00 00 00 00 00 87 CC DD 00 00 00 00 00 1A 14 88 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 B1 3A 00 00 11 00 01 01 87 CC DD 00 00 00 00 00 09 00 00 00 00 00 00 00 2C 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 8C 31 80 01 80 01 39 67 01 00 80 65 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 14 00 00 00 00 00 00 00 E2 07 0C 00 14 00 09 00 0D 00 10 00 C0 45 1B 11 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 EC 09 00 00 03 01 28 77 30 77 26 77 00 00 01 00 00 00 00 00 00 C5 3A 00 00 01 00 01 01 1A 14 88 00 00 00 00 00 0C 00 00 00 00 00 00 00 F1 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 DF 7B E8 18 AF 29 E8 18 5E 57 7F 63 3C 00 6C AA 03 00 65 AA 03 00 63 AA 03 00 00 00 00 00 48 43 7A 00 00 00 00 00 00 00 E2 07 0C 00 0A 00 09 00 2B 00 0B 00 C0 55 70 33 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 01 00 00 00 00 00 03 01 32 77 31 77 30 77 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 3A 00 00 00 E8 03 00 00")
 	// [55:59] GP數量, uint32LE
 	// [8:25] 玩家名稱, max 16 Byte
 	// [81:83] 出擊機體ID
@@ -459,12 +520,16 @@ var (
 
 type User struct {
 	Mx        sync.RWMutex
-	Name      []byte // 1 + 16 Byte
-	GP        uint32 // uint32LE
+
 	GO        int // start from 1
+
+	name      []byte // 1 + 16 Byte
+	GP        uint32 // uint32LE
 	SearchID  uint16
 	SearchExp uint32
 	PageCount int
+
+	Grid      *Grid
 }
 
 func NewUser() *User {
@@ -476,13 +541,14 @@ func NewUser() *User {
 		PageCount: 254,
 	}
 	u.SetName("Jack")
+	u.Grid = NewGrid()
 	return u
 }
 
 func (u *User) String() string {
 	u.Mx.RLock()
 	defer u.Mx.RUnlock()
-	str := fmt.Sprintf("Name: [% 02X], GP: %d, GO: %d, SearchID: %04X, SearchExp: %d, PageCount: %d\n", u.Name, u.GP, u.GO, u.SearchID, u.SearchExp, u.PageCount)
+	str := fmt.Sprintf("Name: [% 02X], GP: %d, GO: %d, SearchID: %04X, SearchExp: %d, PageCount: %d\n", u.name, u.GP, u.GO, u.SearchID, u.SearchExp, u.PageCount)
 	return str
 }
 
@@ -499,10 +565,10 @@ func (u *User) SetName(name string) {
 	nameBuf[0] = uint8(len(buf))
 	copy(nameBuf[1:], buf)
 
-	u.Name = nameBuf
+	u.name = nameBuf
 }
 
-func (u *User) GetBytes1(g *Grid) []byte {
+func (u *User) GetInfo1Bytes() []byte {
 	u.Mx.RLock()
 	defer u.Mx.RUnlock()
 
@@ -510,12 +576,12 @@ func (u *User) GetBytes1(g *Grid) []byte {
 	copy(a, UserInfo001)
 
 	// Name
-	copy(a[8:25], u.Name)
+	copy(a[8:25], u.name)
 
-	bot := g.GetPos(u.GO - 1)
+	bot := u.Grid.GetGo()
 	if bot != nil {
-		binary.LittleEndian.PutUint16(a[81:83], bot.ID)
-		a[85] = uint8(u.GO)
+		buf := bot.GetBytes()
+		copy(a[81:81+len(buf)], buf)
 	}
 
 	// GP
