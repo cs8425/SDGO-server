@@ -16,11 +16,16 @@ type Client struct {
 	wmx         sync.Mutex
 
 	User        *User
+	debug       net.Conn
+	dump        net.Conn
 }
 
 func NewClient(p1 net.Conn) (*Client) {
+	rx, tx := net.Pipe()
 	return &Client{
 		Conn: p1,
+		debug: tx,
+		dump: rx,
 	}
 }
 
@@ -35,6 +40,7 @@ func (c *Client) Write(buff []byte) (int, error) {
 	c.wmx.Lock()
 	defer c.wmx.Unlock()
 
+	c.debug.Write(buff)
 	return c.Conn.Write(buff)
 }
 
@@ -47,15 +53,15 @@ func (c *Client) ReadFrame(buffer []byte) (f Frame, err error) {
 
 
 func (c *Client) WriteRawFrame(dataHex string) (n int, err error) {
-	c.wmx.Lock()
-	defer c.wmx.Unlock()
+	//c.wmx.Lock()
+	//defer c.wmx.Unlock()
 
-	return writeRawFrame(c.Conn, dataHex)
+	return writeRawFrame(c, dataHex)
 }
 
 func (c *Client) WriteFrame(data []byte) (n int, err error) {
-	c.wmx.Lock()
-	defer c.wmx.Unlock()
+	//c.wmx.Lock()
+	//defer c.wmx.Unlock()
 
-	return writeFrame(c.Conn, data)
+	return writeFrame(c, data)
 }
