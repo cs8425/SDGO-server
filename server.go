@@ -1,22 +1,25 @@
-// go build server.go frame.go robot.go egg.go parseConfig.go
+// go build server.go frame.go robot.go egg.go parseConfig.go client.go
 package main
 
 import (
 	"flag"
 	"log"
-	//	"fmt"
+	//"fmt"
 	"net"
 
-	//	"io"
 	"os"
 	"encoding/binary"
-	//	"encoding/hex"
+	//"encoding/hex"
 	"strings"
-	//	"strconv"
+	//"strconv"
 	"bufio"
-	//	"strconv"
-	//	"time"
+	//"strconv"
+	//"time"
 	"sync"
+
+	"net/http"
+	"encoding/json"
+	"io/ioutil"
 )
 
 var (
@@ -27,6 +30,8 @@ var (
 	userData    = flag.String("d", "robot.txt", "data for list")
 	extraData   = flag.String("ex", "extra.txt", "extra data for testing")
 	eggPoolData = flag.String("egg", "egg.txt", "egg pool data")
+
+	webAddr = flag.String("web", ":8080", "http server port")
 )
 
 var user = NewUserInfo()
@@ -718,6 +723,7 @@ func main() {
 
 	<-readyCh
 
+	go webStart()
 	srvStart()
 }
 
@@ -755,4 +761,67 @@ func Vln(level int, v ...interface{}) {
 	if level <= *verbosity {
 		log.Println(v...)
 	}
+}
+
+func webStart() {
+	Vf(2, "Web Listening: %v\n\n", *webAddr)
+	http.HandleFunc("/api/", func (w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "HEAD":
+		case "GET":
+			get(w, r)
+		case "POST", "PUT":
+			set(w, r)
+		default:
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	http.Handle("/debug/", http.StripPrefix("/debug/", http.FileServer(http.Dir("./www"))))
+	http.ListenAndServe(*webAddr, nil)
+}
+
+func get(w http.ResponseWriter, r *http.Request) {
+	var data interface{}
+
+	switch r.URL.Path {
+	case "/api/user":
+		data = user
+	case "/api/egg":
+		data = eggPool
+	case "/api/bot":
+		data = grid
+	default:
+	}
+	Vln(4, "[web][list]", r.URL.Path, data)
+
+	w.Header().Set("Content-Type", "application/json")
+	err := json.NewEncoder(w).Encode(data)
+	if err != nil {
+		Vln(3, "[web][err]", err)
+	}
+}
+
+func set(w http.ResponseWriter, r *http.Request) {
+	buf, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+
+	switch r.URL.Path {
+	//case "/api/user":
+	//	err = json.Unmarshal(buf, &user)
+	case "/api/egg":
+		err = json.Unmarshal(buf, &eggPool)
+	case "/api/bot":
+		err = json.Unmarshal(buf, &grid)
+	default:
+		return
+	}
+	Vln(4, "[web][put]", r.URL.Path, err)
+	if err == nil {
+		clients.Flush()
+		return
+	}
+	http.Error(w, "bad request", http.StatusBadRequest)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -51,6 +52,33 @@ func (e *EggPool) String() string {
 	}
 	str += "}\n"
 	return str
+}
+
+func (e *EggPool) MarshalJSON() ([]byte, error) {
+	e.mx.RLock()
+	defer e.mx.RUnlock()
+
+	data := struct{
+		List  []*EggItem     `json:"list"`
+	}{e.list}
+
+	return json.Marshal(data)
+}
+
+func (e *EggPool) UnmarshalJSON(in []byte) error {
+	data := struct{
+		List  []*EggItem     `json:"list"`
+	}{}
+	err := json.Unmarshal(in, &data)
+	if err != nil {
+		return err
+	}
+
+	e.mx.Lock()
+	e.list = data.List
+	e.mx.Unlock()
+
+	return nil
 }
 
 func (e *EggPool) Add(id uint16, c uint8, p int) {

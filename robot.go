@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/binary"
+	//"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"sync"
 	"math"
@@ -131,7 +133,7 @@ var (
 var RobotFallBack = &Robot{
 	ID:       0x3AEE,
 	Pos:      1,
-	UUID:     0xDEAF0001,
+	UUID:     0xDEAD0001,
 	Lock:     false,
 	Active:   true,
 
@@ -144,7 +146,7 @@ var RobotFallBack = &Robot{
 	Exp:     0,
 	Skill:   0x000124FE,
 	Polish:  50,
-	Color:   []uint16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
+	Color:   []HexColor16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
 	Coat:    []uint32{0x00000000, 0x00000000, 0x00000000},
 	Charge:  2000,
 }
@@ -152,22 +154,22 @@ var RobotFallBack = &Robot{
 type Robot struct {
 	ID     uint16
 	Pos    uint16
-	UUID   uint64
+	UUID   HexUint64
 
 	Lock   bool
-	Active bool
+	Active bool    `json:"-"`
 
 	C      uint8
-	C4     []uint8 // max 4 byte
+	C4     HexByte //[]uint8 // max 4 byte
 	Wing   uint8
-	WingLv []byte // 4 byte
+	WingLv HexByte //[]byte // 4 byte
 	Sess   uint32
 	Lv     uint8
 	Exp    uint32
 	Skill  uint32
 
 	Polish uint16
-	Color  []uint16 // 6 color
+	Color  []HexColor16 // 6 color
 	Coat   []uint32 // 3 Coat of Arms
 
 	Charge uint16 // 0~2000, step = 100
@@ -187,7 +189,7 @@ func (r *Robot) GetBytes() []byte {
 	binary.LittleEndian.PutUint16(buf[4:6], r.Pos)
 
 	// UUID
-	binary.LittleEndian.PutUint64(buf[8:16], r.UUID)
+	binary.LittleEndian.PutUint64(buf[8:16], uint64(r.UUID))
 
 	// lock
 	if r.Lock {
@@ -242,7 +244,7 @@ func (r *Robot) GetBytes() []byte {
 	binary.LittleEndian.PutUint32(buf[132:136], r.Exp)
 
 	// skill
-	binary.LittleEndian.PutUint32(buf[82:86], r.Skill)
+	binary.LittleEndian.PutUint32(buf[82:86], uint32(r.Skill))
 
 	// Polish
 	binary.LittleEndian.PutUint16(buf[58:60], r.Polish)
@@ -250,13 +252,13 @@ func (r *Robot) GetBytes() []byte {
 	// Color
 	for i, v := range r.Color {
 		i = 2 * i
-		binary.LittleEndian.PutUint16(buf[46+i:48+i], v)
+		binary.LittleEndian.PutUint16(buf[46+i:48+i], uint16(v))
 	}
 
 	// Coat
 	for i, v := range r.Coat {
 		i = 4 * i
-		binary.LittleEndian.PutUint32(buf[60+i:64+i], v)
+		binary.LittleEndian.PutUint32(buf[60+i:64+i], uint32(v))
 	}
 
 	// Charge
@@ -352,8 +354,8 @@ func botPrint25B(a []byte) {
 
 type Grid struct {
 	mx          sync.RWMutex
-	Robot       map[*Robot]*Robot
-	uuid2Robot  map[uint64]*Robot
+	robot       map[*Robot]*Robot
+	uuid2Robot  map[HexUint64]*Robot
 	pos2Robot   map[uint16]*Robot
 	GO          uint16
 
@@ -364,6 +366,52 @@ type Grid struct {
 	GP        uint32 // uint32LE
 	PageCount int
 }
+
+func (g *Grid) MarshalJSON() ([]byte, error) {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+
+	data := struct{
+		Robot      []*Robot     `json:"list"`
+		GO         uint16
+		GP         uint32
+		PageCount  int
+	}{
+		Robot: g.GetRobotList(),
+		GO: g.GO,
+		GP: g.GP,
+		PageCount: g.PageCount,
+	}
+
+	return json.Marshal(data)
+}
+func (g *Grid) UnmarshalJSON(in []byte) error {
+	data := struct{
+		Robot      []*Robot     `json:"list"`
+		GO         int
+		GP         uint32
+		PageCount  int
+	}{}
+	err := json.Unmarshal(in, &data)
+	if err != nil {
+		return err
+	}
+	g.mx.Lock()
+	g.GP = data.GP
+	g.PageCount = data.PageCount
+	g.mx.Unlock()
+
+	g.Clear()
+	g.mx.Lock()
+	for _, bot := range data.Robot {
+		g.add(bot, true)
+	}
+	g.mx.Unlock()
+	g.SetGoPos(data.GO)
+
+	return nil
+}
+
 
 func NewGrid() *Grid {
 	g := &Grid{
@@ -387,15 +435,21 @@ func (g *Grid) Add(bot *Robot) {
 	g.mx.Unlock()
 }
 
+func (g *Grid) Set(bot *Robot) {
+	g.mx.Lock()
+	g.add(bot, true)
+	g.mx.Unlock()
+}
+
 func (g *Grid) AddNew(id uint16, c uint8) *Robot {
 	pos := uint16(0)
-	uuid := uint64(0xDEAF0000)
+	uuid := HexUint64(0xDEAF0000)
 	end := uint16(6*g.PageCount)
 	for i := uint16(1) ; i < end; i++ {
 		_, ok := g.pos2Robot[i]
 		if !ok {
 			pos = i
-			uuid |= uint64(i)
+			uuid |= HexUint64(i)
 			break
 		}
 	}
@@ -420,7 +474,7 @@ func (g *Grid) AddNew(id uint16, c uint8) *Robot {
 		Exp:     0,
 		Skill:   0,
 		Polish:  00,
-		Color:   []uint16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
+		Color:   []HexColor16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
 		Coat:    []uint32{0x00000000, 0x00000000, 0x00000000},
 		Charge:  2000,
 	}
@@ -442,14 +496,14 @@ func (g *Grid) add(bot *Robot, overwrite bool) {
 		if ok {
 			return
 		}
-		_, ok = g.Robot[bot]
+		_, ok = g.robot[bot]
 		if ok {
 			return
 		}
 	}
 	g.uuid2Robot[uuid] = bot
 	g.pos2Robot[pos] = bot
-	g.Robot[bot] = bot
+	g.robot[bot] = bot
 }
 
 func (g *Grid) del(bot *Robot) {
@@ -464,14 +518,14 @@ func (g *Grid) del(bot *Robot) {
 	if !ok {
 		return
 	}
-	_, ok = g.Robot[bot]
+	_, ok = g.robot[bot]
 	if !ok {
 		return
 	}
 
 	delete(g.uuid2Robot, uuid)
 	delete(g.pos2Robot, pos)
-	delete(g.Robot, bot)
+	delete(g.robot, bot)
 }
 
 func (g *Grid) SetPos(bot *Robot, pos int) {
@@ -497,16 +551,17 @@ func (g *Grid) Clear() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	g.Robot = make(map[*Robot]*Robot)
-	g.uuid2Robot = make(map[uint64]*Robot)
+	g.robot = make(map[*Robot]*Robot)
+	g.uuid2Robot = make(map[HexUint64]*Robot)
 	g.pos2Robot = make(map[uint16]*Robot)
+	//g.add(RobotFallBack, true)
 }
 
 func (g *Grid) SetGoUUID(uuid uint64) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	bot, ok := g.uuid2Robot[uuid]
+	bot, ok := g.uuid2Robot[HexUint64(uuid)]
 	if !ok {
 		return // UUID not found
 	}
@@ -558,12 +613,24 @@ func (g *Grid) GetGo() *Robot {
 	return g.pos2Robot[g.GO]
 }
 
+func (g *Grid) GetRobotList() []*Robot {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+
+	list := make([]*Robot, 0, len(grid.robot))
+	for _, bot := range grid.robot {
+		list = append(list, bot)
+	}
+
+	return list
+}
+
 func (g *Grid) BuildCached() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
 	allbuf := make(map[uint16][][]byte)
-	for _, bot := range g.Robot {
+	for _, bot := range g.robot {
 		buf := bot.GetBytes()
 		botPrint(buf)
 		page := (bot.Pos - 1) / 6
@@ -579,14 +646,14 @@ func (g *Grid) BuildCachedAll() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	size := len(g.Robot)
+	size := len(g.robot)
 	if size > 63 {
 		size = 63
 	}
 	subbuf := make([]byte, 0, 7+25*size)
 	subbuf = append(subbuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
 	count := 0
-	for _, bot := range g.Robot {
+	for _, bot := range g.robot {
 		if count > 63 {
 			break
 		}
@@ -621,7 +688,7 @@ func (g *Grid) GetAll() []byte {
 func (g *Grid) String() string {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
-	str := fmt.Sprintf("Name: [% 02X], GP: %d, PageCount: %d, Go: %04X\n", g.name, g.GP, g.PageCount, g.GO)
+	str := fmt.Sprintf("Name: [% 02X], GP: %d, PageCount: %d, Robot: %d, Go: %04X\n", g.name, g.GP, g.PageCount, len(g.robot), g.GO)
 	return str
 }
 

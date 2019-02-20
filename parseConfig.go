@@ -9,6 +9,7 @@ import (
 //	"io"
 	"os"
 	"encoding/hex"
+	//"encoding/json"
 	"strings"
 	"strconv"
 	"bufio"
@@ -17,9 +18,95 @@ import (
 	"sort"
 )
 
+
+// for json encode
+type HexByte []byte
+func (m HexByte) MarshalJSON() ([]byte, error) {
+//	return json.Marshal(hex.EncodeToString(m))
+	return []byte(fmt.Sprintf(`"%02X"`, m)), nil
+}
+func (m *HexByte) UnmarshalJSON(in []byte) error {
+	buf, err := hex.DecodeString(strings.Trim(string(in), `"`))
+	if err != nil {
+		return err
+	}
+	*m = buf
+	return nil
+}
+
+type HexUint16 uint16
+func (m HexUint16) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`"%X"`, m)), nil
+}
+func (m *HexUint16) UnmarshalJSON(in []byte) error {
+	tmp, err :=  strconv.ParseUint(strings.Trim(string(in), `"`), 16, 16)
+	if err != nil {
+		return err
+	}
+	*m = HexUint16(tmp)
+	return nil
+}
+
+type HexUint32 uint32
+func (m HexUint32) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`"%X"`, m)), nil
+}
+func (m *HexUint32) UnmarshalJSON(in []byte) error {
+	tmp, err :=  strconv.ParseUint(strings.Trim(string(in), `"`), 16, 32)
+	if err != nil {
+		return err
+	}
+	*m = HexUint32(tmp)
+	return nil
+}
+
+type HexUint64 uint64
+func (m HexUint64) MarshalJSON() ([]byte, error) {
+	return []byte(fmt.Sprintf(`"%X"`, m)), nil
+}
+func (m *HexUint64) UnmarshalJSON(in []byte) error {
+	tmp, err :=  strconv.ParseUint(strings.Trim(string(in), `"`), 16, 64)
+	if err != nil {
+		return err
+	}
+	*m = HexUint64(tmp)
+	return nil
+}
+
+type HexColor16 uint16
+func (m HexColor16) MarshalJSON() ([]byte, error) {
+	out := uint32((m & 0x1F) << 3) // B
+	out |= uint32(((m >> 5) & 0x1F) << 3) << 8 // G
+	out |= uint32(((m >> 10) & 0x1F) << 3) << 16 // R
+	return []byte(fmt.Sprintf(`"%06X"`, out)), nil
+}
+func (m *HexColor16) UnmarshalJSON(in []byte) error {
+	return m.ParseColor(strings.Trim(string(in), `"`), uint16(*m))
+}
+func (m *HexColor16) ParseColor(str string, def uint16) error {
+	tmp, err := strconv.ParseUint(str, 16, 32)
+	if err != nil {
+		*m = HexColor16(def)
+		return err
+	}
+	out := uint16((tmp & 0xFF) >> 3) // B
+	out |= uint16(((tmp >> 8) & 0xFF) >> 3) << 5 // G
+	out |= uint16(((tmp >> 16) & 0xFF) >> 3) << 10 // R
+	*m = HexColor16(out)
+	return nil
+}
+
+func (m HexColor16) DumpColor() (out uint32) {
+	out = uint32((m & 0x1F) << 3) // B
+	out |= uint32(((m >> 5) & 0x1F) << 3) << 8 // G
+	out |= uint32(((m >> 10) & 0x1F) << 3) << 16 // R
+	return out
+}
+
+
 // for parse config only
 type UserInfo struct {
-	Mx        sync.RWMutex
+	Mx        sync.RWMutex   `json:"-"`
 
 	SearchID  uint16
 	SearchExp uint32
@@ -83,7 +170,7 @@ func readData() (error) {
 		var sess uint32 = 23333
 		var skill uint32 = 0
 		var polish uint16 = 0
-		var color []uint16 = []uint16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}
+		var color []HexColor16 = []HexColor16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}
 		var coat []uint32 = []uint32{0x00000000, 0x00000000, 0x00000000}
 
 
@@ -101,22 +188,22 @@ func readData() (error) {
 			fallthrough
 
 		case 15: // 塗裝
-			color[5] = parseColor(fields[14], 0)
+			color[5].ParseColor(fields[14], 0)
 			fallthrough
 		case 14:
-			color[4] = parseColor(fields[13], 0)
+			color[4].ParseColor(fields[13], 0)
 			fallthrough
 		case 13:
-			color[3] = parseColor(fields[12], 0)
+			color[3].ParseColor(fields[12], 0)
 			fallthrough
 		case 12:
-			color[2] = parseColor(fields[11], 0)
+			color[2].ParseColor(fields[11], 0)
 			fallthrough
 		case 11:
-			color[1] = parseColor(fields[10], 0)
+			color[1].ParseColor(fields[10], 0)
 			fallthrough
 		case 10:
-			color[0] = parseColor(fields[9], 0)
+			color[0].ParseColor(fields[9], 0)
 			fallthrough
 
 		case 9: // 拋光
@@ -168,7 +255,7 @@ func readData() (error) {
 		}
 
 		bot := NewBot(rid)
-		bot.UUID = uint64(idx) + 0xADDE0000
+		bot.UUID = HexUint64(idx) + 0xADDE0000
 		bot.Pos = uint16(idx)
 		bot.C4 = C4
 		bot.Lv = Lv
@@ -188,7 +275,7 @@ func readData() (error) {
 		//Vf(7, "[dbg][open]%v, %X", bot, bot.GetBytes(idx))
 		idx += 1
 
-		grid.Add(bot)
+		grid.Set(bot)
 	}
 
 	grid.SetName(user.Name)
@@ -198,7 +285,7 @@ func readData() (error) {
 	grid.BuildCached()
 	grid.BuildCachedAll()
 
-	Vln(4, "[dbg][grid]", len(grid.Robot), len(grid.buf), grid.GetGo())
+	Vln(4, "[dbg][grid]", len(grid.robot), len(grid.buf), grid.GetGo())
 	Vln(4, "[dbg][user]", user)
 
 	return nil
@@ -319,7 +406,7 @@ func readEggPool() (error) {
 	return nil
 }
 
-func parseColor(str string, def uint16) (out uint16) {
+/*func parseColor(str string, def uint16) (out uint16) {
 	tmp, err := strconv.ParseUint(str, 16, 32)
 	if err != nil {
 		return def
@@ -328,7 +415,7 @@ func parseColor(str string, def uint16) (out uint16) {
 	out |= uint16(((tmp >> 8) & 0xFF) >> 3) << 5 // G
 	out |= uint16(((tmp >> 16) & 0xFF) >> 3) << 10 // R
 	return out
-}
+}*/
 
 func parseUint32LE(str string, hex int, def uint32) (uint32) {
 	tmp, err := strconv.ParseUint(str, hex, 32)
@@ -445,20 +532,16 @@ func (r RobotByPos) Len() int      { return len(r) }
 func (r RobotByPos) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
 func (r RobotByPos) Less(i, j int) bool { return r[i].Pos < r[j].Pos }
 
-func dumpColor(tmp uint16) (out uint32) {
+/*func dumpColor(tmp uint16) (out uint32) {
 	out = uint32((tmp & 0x1F) << 3) // B
 	out |= uint32(((tmp >> 5) & 0x1F) << 3) << 8 // G
 	out |= uint32(((tmp >> 10) & 0x1F) << 3) << 16 // R
 	return out
-}
+}*/
 
 func dumpRobot() string {
 	var out strings.Builder
-	list := make([]*Robot, 0, len(grid.Robot))
-	for _, bot := range grid.Robot {
-		list = append(list, bot)
-	}
-
+	list := grid.GetRobotList()
 	sort.Sort(RobotByPos(list))
 	i := uint16(1)
 	for _, b := range list {
@@ -467,7 +550,8 @@ func dumpRobot() string {
 		}
 		i = b.Pos + 1
 		id := (b.ID >> 8) | ((b.ID & 0xFF) << 8)
-		color := fmt.Sprintf("%02X\t%06X\t%06X\t%06X\t%06X\t%06X\t%06X", b.Polish, dumpColor(b.Color[0]), dumpColor(b.Color[1]), dumpColor(b.Color[2]), dumpColor(b.Color[3]), dumpColor(b.Color[4]), dumpColor(b.Color[5]))
+		//color := fmt.Sprintf("%02X\t%06X\t%06X\t%06X\t%06X\t%06X\t%06X", b.Polish, dumpColor(b.Color[0]), dumpColor(b.Color[1]), dumpColor(b.Color[2]), dumpColor(b.Color[3]), dumpColor(b.Color[4]), dumpColor(b.Color[5]))
+		color := fmt.Sprintf("%02X\t%06X\t%06X\t%06X\t%06X\t%06X\t%06X", b.Polish, b.Color[0].DumpColor(), b.Color[1].DumpColor(), b.Color[2].DumpColor(), b.Color[3].DumpColor(), b.Color[4].DumpColor(), b.Color[5].DumpColor())
 		coat := fmt.Sprintf("%08X\t%08X\t%08X", b.Coat[0], b.Coat[1], b.Coat[2])
 		str := fmt.Sprintf("%04X\t%02X\t%d\t%02X\t%d\t%d\t%d\t%08X\t%v\t%v\n", id, b.C4, b.Wing, b.WingLv, b.Lv, b.Exp, b.Sess, b.Skill, color, coat)
 		Vf(5, "[save line]%v", str)
