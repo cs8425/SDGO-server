@@ -6,74 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"sort"
 	"math"
 )
 
-/*
-機動2/刀圍       25 77
-機動2/中彈       26 77
-機動2/噴氣       28 77
-機動3/ZZ        30 77
-機動8/降索       31 77
-機動8/V降       50 77
-機動10/刀速      2F 77
-機動10/遠射速    4A 77
-機動12/衝跳      32 77
-
-攻擊2/hp         04 77
-攻擊2/刀圍       05 77
-攻擊2/中彈       06 77
-攻擊2/遠彈       07 77
-攻擊2/噴氣       08 77
-攻擊3/9攻        10 77
-攻擊6/實彈速     09 77
-攻擊6/光判       0A 77
-攻擊8/破甲       11 77
-攻擊10/刀速      0F 77
-攻擊10/中射速    45 77
-攻擊10/機動      0E 77
-攻擊12/爆擊      12 77
-攻擊13/EX       13 77
-
-防禦2/hp          14 77
-防禦2/刀圍         15 77
-防禦2/中彈         16 77
-防禦2/遠彈         17 77
-防禦3/9防         20 77
-防禦6/光判         1A 77
-防禦8/sp升         21 77
-防禦10/刀速        1F 77
-防禦10/中射速       47 77
-防禦12/最小化       22 77
-
-平衡2/刀圍         35 77
-平衡2/中彈         36 77
-平衡2/遠彈         37 77
-平衡2/噴氣         38 77
-平衡3/ZZ          4D 77
-平衡6/實彈速       39 77
-平衡8/降索         40 77
-平衡8/sp升         41 77
-平衡10/刀速        3F 77
-平衡10/3攻         44 77
-平衡12/破甲        42 77
-平衡EX/EX         43 77
-
-*/
-/*
-
-(*)為原始資料
-(X)為無作用 or 訓練場測不出
-
-F9240100	V疫苗(X)
-FA240100	新人類(*)
-FB240100	格鬥術(X)
-FC240100	PS甲(X)
-FD240100	必殺覺醒(X)
-FE240100	I力場(X)
-FF240100	底力爆發(X)
-
-*/
 var (
 	WZC = []byte{0x8F, 0x42, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x01, 0x5C, 0x27, 0x30, 0x01, 0x02, 0x03, 0x04, 0x05, 0x0A, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x71, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xC8, 0x44, 0x29, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xE2, 0x07, 0x0C, 0x00, 0x1D, 0x00, 0x10, 0x00, 0x0A, 0x00, 0x3A, 0x00, 0xC0, 0x85, 0x5D, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFD, 0x40, 0x00, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}
 	// len() == 153
@@ -147,12 +83,12 @@ var RobotFallBack = &Robot{
 	Skill:   0x000124FE,
 	Polish:  50,
 	Color:   []HexColor16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-	Coat:    []uint32{0x00000000, 0x00000000, 0x00000000},
+	Coat:    []HexUint32{0x00000000, 0x00000000, 0x00000000},
 	Charge:  2000,
 }
 
 type Robot struct {
-	ID     uint16
+	ID     HexBotID
 	Pos    uint16
 	UUID   HexUint64
 
@@ -166,11 +102,11 @@ type Robot struct {
 	Sess   uint32
 	Lv     uint8
 	Exp    uint32
-	Skill  uint32
+	Skill  HexUint32
 
 	Polish uint16
 	Color  []HexColor16 // 6 color
-	Coat   []uint32 // 3 Coat of Arms
+	Coat   []HexUint32 // 3 Coat of Arms
 
 	Charge uint16 // 0~2000, step = 100
 
@@ -315,7 +251,7 @@ func (r *Robot) GetBytes2() []byte {
 
 func NewBot(id uint16) *Robot {
 	r := &Robot{
-		ID:     id,
+		ID:     HexBotID(id),
 		C:      4,
 		C4:     []uint8{0xFF, 0xFF, 0xFF, 0xFF},
 		Lv:     13,
@@ -377,7 +313,7 @@ func (g *Grid) MarshalJSON() ([]byte, error) {
 		GP         uint32
 		PageCount  int
 	}{
-		Robot: g.GetRobotList(),
+		Robot: g.GetRobotListByPos(),
 		GO: g.GO,
 		GP: g.GP,
 		PageCount: g.PageCount,
@@ -459,7 +395,7 @@ func (g *Grid) AddNew(id uint16, c uint8) *Robot {
 	}
 
 	bot := &Robot{
-		ID:       id,
+		ID:       HexBotID(id),
 		Pos:      pos,
 		UUID:     uuid,
 		Lock:     false,
@@ -475,7 +411,7 @@ func (g *Grid) AddNew(id uint16, c uint8) *Robot {
 		Skill:   0,
 		Polish:  00,
 		Color:   []HexColor16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
-		Coat:    []uint32{0x00000000, 0x00000000, 0x00000000},
+		Coat:    []HexUint32{0x00000000, 0x00000000, 0x00000000},
 		Charge:  2000,
 	}
 
@@ -622,6 +558,17 @@ func (g *Grid) GetRobotList() []*Robot {
 		list = append(list, bot)
 	}
 
+	return list
+}
+
+type RobotByPos []*Robot
+func (r RobotByPos) Len() int      { return len(r) }
+func (r RobotByPos) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r RobotByPos) Less(i, j int) bool { return r[i].Pos < r[j].Pos }
+
+func (g *Grid) GetRobotListByPos() []*Robot {
+	list := grid.GetRobotList()
+	sort.Sort(RobotByPos(list))
 	return list
 }
 
@@ -778,7 +725,7 @@ var (
 // [118:120] 出擊機體ID
 )
 
-func BuildUserInfo002Pack(name []byte, exp uint32, id uint16) []byte {
+func BuildUserInfo002Pack(name []byte, exp uint32, id HexBotID) []byte {
 	a := make([]byte, len(UserInfo002), len(UserInfo002))
 	copy(a, UserInfo002)
 
@@ -789,7 +736,7 @@ func BuildUserInfo002Pack(name []byte, exp uint32, id uint16) []byte {
 	binary.LittleEndian.PutUint32(a[68:72], exp)
 
 	// ID
-	binary.LittleEndian.PutUint16(a[118:120], id)
+	binary.LittleEndian.PutUint16(a[118:120], uint16(id))
 
 	return a
 }

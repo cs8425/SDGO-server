@@ -4,7 +4,6 @@ import (
 //	"flag"
 //	"log"
 	"fmt"
-//	"net"
 
 //	"io"
 	"os"
@@ -15,14 +14,12 @@ import (
 	"bufio"
 //	"time"
 	"sync"
-	"sort"
 )
 
 
 // for json encode
 type HexByte []byte
 func (m HexByte) MarshalJSON() ([]byte, error) {
-//	return json.Marshal(hex.EncodeToString(m))
 	return []byte(fmt.Sprintf(`"%02X"`, m)), nil
 }
 func (m *HexByte) UnmarshalJSON(in []byte) error {
@@ -95,7 +92,6 @@ func (m *HexColor16) ParseColor(str string, def uint16) error {
 	*m = HexColor16(out)
 	return nil
 }
-
 func (m HexColor16) DumpColor() (out uint32) {
 	out = uint32((m & 0x1F) << 3) // B
 	out |= uint32(((m >> 5) & 0x1F) << 3) << 8 // G
@@ -103,12 +99,31 @@ func (m HexColor16) DumpColor() (out uint32) {
 	return out
 }
 
+// for print order
+type HexBotID uint16
+func (m HexBotID) MarshalJSON() ([]byte, error) {
+	id := uint16((m >> 8) | ((m & 0xFF) << 8))
+	return []byte(fmt.Sprintf(`"%04X"`, id)), nil
+}
+func (m *HexBotID) UnmarshalJSON(in []byte) error {
+	tmp, err := hex.DecodeString(strings.Trim(string(in), `"`))
+	if len(tmp) == 2 && err == nil {
+		*m = HexBotID((uint16(tmp[1]) << 8) | uint16(tmp[0]))
+	}
+	return err
+}
+func (m HexBotID) String() string {
+	id := uint16((m >> 8) | ((m & 0xFF) << 8))
+	return fmt.Sprintf("%04X", id)
+}
+
+
 
 // for parse config only
 type UserInfo struct {
 	Mx        sync.RWMutex   `json:"-"`
 
-	SearchID  uint16
+	SearchID  HexBotID
 	SearchExp uint32
 
 	Name      string
@@ -131,7 +146,7 @@ func NewUserInfo() *UserInfo {
 func (u *UserInfo) String() string {
 	u.Mx.RLock()
 	defer u.Mx.RUnlock()
-	str := fmt.Sprintf("Name: [% 02X], GP: %d, PageCount: %d, Go: %d, SearchID: %04X, SearchExp: %d\n", u.Name, u.GP, u.PageCount, u.GO, u.SearchID, u.SearchExp)
+	str := fmt.Sprintf("Name: [% 02X], GP: %d, PageCount: %d, Go: %d, SearchID: %v, SearchExp: %d\n", u.Name, u.GP, u.PageCount, u.GO, u.SearchID, u.SearchExp)
 	return str
 }
 
@@ -168,10 +183,10 @@ func readData() (error) {
 		var Lv uint8 = 13
 		var exp uint32 = 12345
 		var sess uint32 = 23333
-		var skill uint32 = 0
+		var skill HexUint32 = 0
 		var polish uint16 = 0
 		var color []HexColor16 = []HexColor16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000}
-		var coat []uint32 = []uint32{0x00000000, 0x00000000, 0x00000000}
+		var coat []HexUint32 = []HexUint32{0x00000000, 0x00000000, 0x00000000}
 
 
 		switch len(fields) {
@@ -329,7 +344,7 @@ func readUser(d []string) {
 			rid = (uint16(tmp[1]) << 8) | uint16(tmp[0])
 		}
 		user.Mx.Lock()
-		user.SearchID = rid
+		user.SearchID = HexBotID(rid)
 		user.Mx.Unlock()
 
 	case "SearchExp":
@@ -406,23 +421,12 @@ func readEggPool() (error) {
 	return nil
 }
 
-/*func parseColor(str string, def uint16) (out uint16) {
-	tmp, err := strconv.ParseUint(str, 16, 32)
-	if err != nil {
-		return def
-	}
-	out = uint16((tmp & 0xFF) >> 3) // B
-	out |= uint16(((tmp >> 8) & 0xFF) >> 3) << 5 // G
-	out |= uint16(((tmp >> 16) & 0xFF) >> 3) << 10 // R
-	return out
-}*/
-
-func parseUint32LE(str string, hex int, def uint32) (uint32) {
+func parseUint32LE(str string, hex int, def uint32) (HexUint32) {
 	tmp, err := strconv.ParseUint(str, hex, 32)
 	if err != nil {
-		return def
+		return HexUint32(def)
 	}
-	return uint32(tmp)
+	return HexUint32(tmp)
 }
 
 func readFile(path string) ([]string, error) {
@@ -527,22 +531,9 @@ func readExtra() (error) {
 	return nil
 }
 
-type RobotByPos []*Robot
-func (r RobotByPos) Len() int      { return len(r) }
-func (r RobotByPos) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
-func (r RobotByPos) Less(i, j int) bool { return r[i].Pos < r[j].Pos }
-
-/*func dumpColor(tmp uint16) (out uint32) {
-	out = uint32((tmp & 0x1F) << 3) // B
-	out |= uint32(((tmp >> 5) & 0x1F) << 3) << 8 // G
-	out |= uint32(((tmp >> 10) & 0x1F) << 3) << 16 // R
-	return out
-}*/
-
 func dumpRobot() string {
 	var out strings.Builder
-	list := grid.GetRobotList()
-	sort.Sort(RobotByPos(list))
+	list := grid.GetRobotListByPos()
 	i := uint16(1)
 	for _, b := range list {
 		if b.Pos != i {
@@ -550,7 +541,6 @@ func dumpRobot() string {
 		}
 		i = b.Pos + 1
 		id := (b.ID >> 8) | ((b.ID & 0xFF) << 8)
-		//color := fmt.Sprintf("%02X\t%06X\t%06X\t%06X\t%06X\t%06X\t%06X", b.Polish, dumpColor(b.Color[0]), dumpColor(b.Color[1]), dumpColor(b.Color[2]), dumpColor(b.Color[3]), dumpColor(b.Color[4]), dumpColor(b.Color[5]))
 		color := fmt.Sprintf("%02X\t%06X\t%06X\t%06X\t%06X\t%06X\t%06X", b.Polish, b.Color[0].DumpColor(), b.Color[1].DumpColor(), b.Color[2].DumpColor(), b.Color[3].DumpColor(), b.Color[4].DumpColor(), b.Color[5].DumpColor())
 		coat := fmt.Sprintf("%08X\t%08X\t%08X", b.Coat[0], b.Coat[1], b.Coat[2])
 		str := fmt.Sprintf("%04X\t%02X\t%d\t%02X\t%d\t%d\t%d\t%08X\t%v\t%v\n", id, b.C4, b.Wing, b.WingLv, b.Lv, b.Exp, b.Sess, b.Skill, color, coat)

@@ -15,8 +15,6 @@ var EggFallBack = &EggItem{
 	C: 4,
 }
 
-
-
 func init() {
 	rand.Seed(time.Now().UnixNano())
 }
