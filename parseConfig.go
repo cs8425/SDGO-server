@@ -14,6 +14,7 @@ import (
 	"bufio"
 //	"time"
 	"sync"
+	"sort"
 )
 
 // for parse config only
@@ -180,6 +181,7 @@ func readData() (error) {
 		bot.Color = color
 		bot.Coat = coat
 		bot.Charge = 2000
+		bot.C = 4
 		//bot.Lock = true
 
 		Vf(5, "[dbg][open]%04X, %04X, %d, %04X, %04X\n", rid, C4, wing, wingLv, color)
@@ -436,4 +438,85 @@ func readExtra() (error) {
 	}
 
 	return nil
+}
+
+type RobotByPos []*Robot
+func (r RobotByPos) Len() int      { return len(r) }
+func (r RobotByPos) Swap(i, j int) { r[i], r[j] = r[j], r[i] }
+func (r RobotByPos) Less(i, j int) bool { return r[i].Pos < r[j].Pos }
+
+func dumpColor(tmp uint16) (out uint32) {
+	out = uint32((tmp & 0x1F) << 3) // B
+	out |= uint32(((tmp >> 5) & 0x1F) << 3) << 8 // G
+	out |= uint32(((tmp >> 10) & 0x1F) << 3) << 16 // R
+	return out
+}
+
+func dumpRobot() string {
+	var out strings.Builder
+	list := make([]*Robot, 0, len(grid.Robot))
+	for _, bot := range grid.Robot {
+		list = append(list, bot)
+	}
+
+	sort.Sort(RobotByPos(list))
+	i := uint16(1)
+	for _, b := range list {
+		if b.Pos != i {
+			out.WriteString("0000\n")
+		}
+		i = b.Pos + 1
+		id := (b.ID >> 8) | ((b.ID & 0xFF) << 8)
+		color := fmt.Sprintf("%02X\t%06X\t%06X\t%06X\t%06X\t%06X\t%06X", b.Polish, dumpColor(b.Color[0]), dumpColor(b.Color[1]), dumpColor(b.Color[2]), dumpColor(b.Color[3]), dumpColor(b.Color[4]), dumpColor(b.Color[5]))
+		coat := fmt.Sprintf("%08X\t%08X\t%08X", b.Coat[0], b.Coat[1], b.Coat[2])
+		str := fmt.Sprintf("%04X\t%02X\t%d\t%02X\t%d\t%d\t%d\t%08X\t%v\t%v\n", id, b.C4, b.Wing, b.WingLv, b.Lv, b.Exp, b.Sess, b.Skill, color, coat)
+		Vf(5, "[save line]%v", str)
+		out.WriteString(str)
+	}
+
+	return out.String()
+}
+
+func dumpUser() string {
+	user.Mx.Lock()
+	defer user.Mx.Unlock()
+
+	var out strings.Builder
+	out.WriteString("!!!\tName\t")
+	out.WriteString(user.Name)
+
+	out.WriteString("\n!!!\tGP\t")
+	out.WriteString(fmt.Sprintf("%d", user.GP))
+
+	out.WriteString("\n!!!\tGO\t")
+	out.WriteString(fmt.Sprintf("%d", grid.GO))
+
+	out.WriteString("\n!!!\tSearchID\t")
+	out.WriteString(fmt.Sprintf("%04X", user.SearchID))
+	out.WriteString("\n!!!\tSearchExp\t")
+	out.WriteString(fmt.Sprintf("%d\n", user.SearchExp))
+
+	return out.String()
+}
+
+func saveData() error {
+	botStr := dumpRobot()
+	userStr := dumpUser()
+
+	af, err := os.OpenFile(*userData, os.O_RDWR | os.O_CREATE | os.O_TRUNC, 0644)
+	if err != nil {
+		Vln(2, "[save]", err)
+		return err
+	}
+	defer af.Close()
+
+	_, err = af.WriteString(botStr)
+	if err != nil {
+		Vln(2, "[save]", err)
+		return err
+	}
+	_, err = af.WriteString(userStr)
+
+	Vln(3, "[saveRobot]")
+	return err
 }

@@ -11,7 +11,7 @@ import (
 	"os"
 	"encoding/binary"
 	//	"encoding/hex"
-	//	"strings"
+	"strings"
 	//	"strconv"
 	"bufio"
 	//	"strconv"
@@ -596,9 +596,17 @@ FE 11 35 00 FF 11 35 00 00 12 35 00 `)
 			// (GP)   [B0][0010][03F0]0A 00 F0 03 B0 05 00 00 00 00 61 09 00 00
 			// (自訂) [17][0042][03F0]2A 00 F0 03 17 08 85 35 00 00 03 00 AE 3A 00 00 A7 3A 00 00 9B 3A 00 00 91 3E 00 00 93 3E 00 00 95 3E 00 00 00 00 00 00 00 00 00 00 01 08
 			out := eggPool.GetOne()
-			Vln(4, "[egg]", out)
-			p1.WriteFrame(BuildEggPack(out, user.GP))
-			// TODO: save & force update grid
+			bot := p1.AddNew(out.ID, out.C)
+			pos := uint16(1)
+			if bot != nil {
+				pos = bot.Pos
+			}
+			Vln(4, "[egg]", out, pos)
+			p1.WriteFrame(BuildEggPack(out, user.GP, pos))
+
+			// force update grid
+			p1.Flush()
+			first = true
 
 			// --- logout
 		case 0x0A97:
@@ -660,19 +668,37 @@ func main() {
 	readyCh := make(chan struct{}, 1)
 	go func() {
 		stdin := bufio.NewReader(os.Stdin)
+		var err error
+		cmd := "L"
+		//readData()
 
 		for {
-			readExtra()
-			readEggPool()
 
-			err := readData()
+			switch cmd {
+			default:
+				fallthrough
+			case "L":
+				readExtra()
+				readEggPool()
 
-			//buf := grid.GetPage(1)
-			//Vf(4, "[dbg][%d][%v]\n", len(buf), buf)
+				err = readData()
 
-			if err != nil {
-				Vf(1, "Read Data Error: %v\n\n", err)
-				goto WAIT
+				//buf := grid.GetPage(1)
+				//Vf(4, "[dbg][%d][%v]\n", len(buf), buf)
+
+				if err != nil {
+					Vf(1, "Read Data Error: %v\n\n", err)
+					goto WAIT
+				}
+				// force update
+				clients.Flush()
+
+			case "R":
+				// force update
+				clients.Flush()
+
+			case "S":
+				saveData()
 			}
 
 			select {
@@ -680,14 +706,13 @@ func main() {
 			default:
 			}
 
-			// force update
-			clients.Flush()
-
 		WAIT:
-			_, err = stdin.ReadString('\n')
+			cmd, err = stdin.ReadString('\n')
 			if err != nil {
 				break
 			}
+			cmd = strings.Trim(cmd, "\n\r\t ")
+			Vln(3, "[cmd]", cmd)
 		}
 	}()
 

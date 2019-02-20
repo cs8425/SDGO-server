@@ -82,17 +82,19 @@ func (e *EggPool) GetOne() (*EggItem) {
 
 // PacketID = 53 0A
 // len() = 52
-func BuildEggPack(it *EggItem, gp uint32) ([]byte) {
+func BuildEggPack(it *EggItem, gp uint32, pos uint16) ([]byte) {
 	buf := Raw2Byte("53 0a 4a 20 00 00" + 
 	"EE 3A 00 00 " + 
 	"80 25 00 00 " + 
 	"00 00 00 00 5d 87 07 00 00 00 00 00 " + 
 	"03 " + 
-	"EE 3A 00 00 5d 87 07 00 00 00 00 00 0c 00 01 00 00 00 00 00 00 fa 44 00 00")
+	"EE 3A 00 00 5d 87 07 00 00 00 00 00 " +
+	"0c 00 01 00 00 00 00 00 00 fa 44 00 00")
 
 	binary.LittleEndian.PutUint16(buf[6:8], it.ID)
 	binary.LittleEndian.PutUint16(buf[27:29], it.ID)
 	buf[26] = it.C
+	binary.LittleEndian.PutUint16(buf[39:41], pos)
 
 	// GP
 	binary.LittleEndian.PutUint32(buf[10:14], gp)

@@ -135,6 +135,7 @@ var RobotFallBack = &Robot{
 	Lock:     false,
 	Active:   true,
 
+	C:       4,
 	C4:      []uint8{0x4D, 0x30, 0x10, 0x20},
 	Wing:    2,
 	WingLv:  []byte{0x32, 0x32, 0x32, 0x32},
@@ -156,6 +157,7 @@ type Robot struct {
 	Lock   bool
 	Active bool
 
+	C      uint8
 	C4     []uint8 // max 4 byte
 	Wing   uint8
 	WingLv []byte // 4 byte
@@ -202,13 +204,16 @@ func (r *Robot) GetBytes() []byte {
 	}
 
 
-	cc := len(r.C4)
-	if cc >= 4 {
+	cc := uint8(len(r.C4))
+	if cc < r.C {
+		r.C = cc
+	}
+	if r.C >= 4 {
 		buf[136] = 4
 	} else {
-		buf[136] = byte(cc)
+		buf[136] = r.C
 	}
-	switch cc {
+	switch r.C {
 	case 4:
 		setC(r.C4[3], buf[144:146])
 		fallthrough
@@ -309,6 +314,7 @@ func (r *Robot) GetBytes2() []byte {
 func NewBot(id uint16) *Robot {
 	r := &Robot{
 		ID:     id,
+		C:      4,
 		C4:     []uint8{0xFF, 0xFF, 0xFF, 0xFF},
 		Lv:     13,
 		Exp:    12345,
@@ -330,7 +336,7 @@ func botPrint(a []byte) {
 	pos := binary.LittleEndian.Uint16(a[4:6])
 	polish := binary.LittleEndian.Uint16(a[58:60])
 	color := fmt.Sprintf("[color]%04X|%04X|%04X|%04X|%04X|%04X", binary.LittleEndian.Uint16(a[46:48]), binary.LittleEndian.Uint16(a[48:50]), binary.LittleEndian.Uint16(a[50:52]), binary.LittleEndian.Uint16(a[52:54]), binary.LittleEndian.Uint16(a[54:56]), binary.LittleEndian.Uint16(a[56:58]))
-	out := fmt.Sprintf("[id] %X,[pos] %d, [%dc] %X|%X|%X|%X, [w%d] %v, [lv] %d, [exp] %d, [sess] %d, [skill] %02X, [Polish] %d%%, %v", a[0:2], pos, a[136], c1, c2, c3, c4, wing, wingLV, lv, exp, session, skill, polish, color)
+	out := fmt.Sprintf("[id] %X,[pos] %03d, [%dc] %X|%X|%X|%X, [w%d] %v, [lv] %d, [exp] %d, [sess] %d, [skill] %02X, [Polish] %d%%, %v", a[0:2], pos, a[136], c1, c2, c3, c4, wing, wingLV, lv, exp, session, skill, polish, color)
 	fmt.Println(out)
 }
 
@@ -340,7 +346,7 @@ func botPrint25B(a []byte) {
 	ship := a[16]
 	lock := a[17]
 	pos := binary.LittleEndian.Uint16(a[12:14])
-	out := fmt.Sprintf("[id] %X, [pos] %d, [w%d] %v, [ship] %d, [skill] %d, [lock] %d", a[0:2], pos, wing, wingLV, ship, skill, lock)
+	out := fmt.Sprintf("[id] %X, [pos] %03d, [w%d] %v, [ship] %d, [skill] %d, [lock] %d", a[0:2], pos, wing, wingLV, ship, skill, lock)
 	fmt.Println(out)
 }
 
@@ -379,6 +385,49 @@ func (g *Grid) Add(bot *Robot) {
 	g.mx.Lock()
 	g.add(bot, false)
 	g.mx.Unlock()
+}
+
+func (g *Grid) AddNew(id uint16, c uint8) *Robot {
+	pos := uint16(0)
+	uuid := uint64(0xDEAF0000)
+	end := uint16(6*g.PageCount)
+	for i := uint16(1) ; i < end; i++ {
+		_, ok := g.pos2Robot[i]
+		if !ok {
+			pos = i
+			uuid |= uint64(i)
+			break
+		}
+	}
+	Vf(4, "[AddNew]%02X, %v, %v, %04X\n", id, c, pos, uuid)
+	if pos == 0 {
+		return nil
+	}
+
+	bot := &Robot{
+		ID:       id,
+		Pos:      pos,
+		UUID:     uuid,
+		Lock:     false,
+		Active:   false,
+
+		C:       c,
+		C4:      []uint8{0xFF, 0xFF, 0xFF, 0xFF},
+		Wing:    0,
+		WingLv:  []byte{0x00, 0x00, 0x00, 0x00},
+		Sess:    0,
+		Lv:      1,
+		Exp:     0,
+		Skill:   0,
+		Polish:  00,
+		Color:   []uint16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
+		Coat:    []uint32{0x00000000, 0x00000000, 0x00000000},
+		Charge:  2000,
+	}
+
+	g.add(bot, false)
+
+	return bot
 }
 
 func (g *Grid) add(bot *Robot, overwrite bool) {
