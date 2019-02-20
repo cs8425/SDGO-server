@@ -16,7 +16,7 @@ import (
 	"bufio"
 	//	"strconv"
 	//	"time"
-	//	"sync"
+	"sync"
 )
 
 var (
@@ -29,8 +29,43 @@ var (
 	eggPoolData = flag.String("egg", "egg.txt", "egg pool data")
 )
 
-var user = NewUser()
+var user = NewUserInfo()
+
+var grid = NewGrid()
 var eggPool = NewEggPool()
+
+
+type Session struct {
+	mx       sync.Mutex
+	list     map[*Client]*Client
+}
+
+func (s *Session) Add(cl *Client) {
+	s.mx.Lock()
+	s.list[cl] = cl
+	s.mx.Unlock()
+}
+
+func (s *Session) Del(cl *Client) {
+	s.mx.Lock()
+	delete(s.list, cl)
+	s.mx.Unlock()
+}
+
+func (s *Session) Flush() {
+	s.mx.Lock()
+	for _, cl := range s.list {
+		cl.Flush()
+	}
+	s.mx.Unlock()
+}
+
+var clients = &Session{
+	list: make(map[*Client]*Client),
+}
+
+
+var PageFriends = Raw2Byte("0A 07 85 35 00 00 08 27 00 00 00 03 00 00 00 0C 00 01 00 00 00 CF C4 D1 C7 00 00 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 3A 23 6F 24 00 00 00 00 00 00 00 00 00 00 00 00 5E 34 00 00 0A 00 01 00 00 00 CE E1 C3 FB CB C0 CD F6 D6 AE D2 ED 00 00 00 00 00 01 02 00 00 00 00 00 00 00 00 00 00 00 2F 23 5F 24 00 00 00 00 00 00 00 00 00 00 00 00 DD 13 00 00 0A 00 01 00 00 00 4A 6F 6B 65 00 00 00 00 00 00 00 00 00 00 00 00 00 07 03 00 00 00 1C 00 00 00 00 00 00 00 2B 23 5B 24 00 00 00 00 00 00 00 00 05 00 00 00 49 FB 00 00 0A 00 01 00 00 00 45 6E 64 6A 6F 62 58 58 00 00 00 00 00 00 00 00 00 07 03 00 00 00 00 00 00 00 53 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 4A 1C 00 00 0C 00 01 00 00 00 B0 D6 B0 D6 D4 D9 B4 F2 CE D2 D2 BB B4 CE 00 00 00 07 03 00 00 00 00 00 00 00 6F 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 69 0E 00 00 0A 00 01 00 00 00 CB C4 B4 FA D6 D8 BC DF BC DF 32 30 00 00 00 00 00 02 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 02 00 00 00 05 00 01 00 00 00 B0 A2 C4 B7 C2 DE 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 31 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 4B 06 00 00 0A 00 01 00 00 00 CD B8 D6 A7 B5 C4 BB D8 D2 E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 ")
 
 func handleConn(p1 net.Conn) {
 	defer p1.Close()
@@ -63,7 +98,7 @@ func handleConn(p1 net.Conn) {
 			Vln(3, "[login]", f)
 
 			// TODO: check login & get user data
-			client := NewClient(p1)
+			client := NewClient(p1, grid)
 			handleUser(client, buffer)
 			return
 
@@ -73,21 +108,13 @@ func handleConn(p1 net.Conn) {
 	}
 }
 
-func dumpWrite(p1 net.Conn) {
-	buffer := make([]byte, (1<<16)+headerSize)
-
-	for {
-		f, err := readFrame(p1, buffer)
-		if err != nil {
-			return
-		}
-		Vln(5, "[dump]", f)
-	}
-}
-
 func handleUser(p1 *Client, buffer []byte) {
-	//first := true
-	go dumpWrite(p1.dump)
+	defer p1.Close()
+
+	clients.Add(p1)
+	defer clients.Del(p1)
+
+	first := true
 
 	p1.Write(logData1)
 	p1.Write(logData2)
@@ -131,8 +158,8 @@ func handleUser(p1 *Client, buffer []byte) {
 			// TODO: 有資料要重傳, 會卡loading
 			if f.data[6] == byte(0x0A) {
 				Vf(4, "[logout]\n")
-				//handleLogout(p1, buffer)
 			}
+
 
 		case 0x9C43:
 			// [43][0010][03F0]0A 00 F0 03 43 9C 00 00 00 00 05 BC 56 C2
@@ -144,9 +171,9 @@ func handleUser(p1 *Client, buffer []byte) {
 
 		case 0x0A4D:
 			// [4D][0020][03F0]14 00 F0 03 4D 0A 00 00 00 00 00 00 00 00 00 00 00 00 2F 61 A6 83 30 FD
-			//p1.WriteRawFrame("0D 00 F0 03 C7 08 00 00 00 00 7A 60 2A 3F E0 59 00") // 122.96.42.63:23008 ?
+			p1.WriteRawFrame("0D 00 F0 03 C7 08 00 00 00 00 7A 60 2A 3F E0 59 00") // 122.96.42.63:23008 ?
 			//p1.WriteRawFrame("0D 00 F0 03 C7 08 00 00 00 00 7F 00 00 01 A4 0F 00") // 127.0.0.1:4004
-			p1.WriteRawFrame("0D 00 F0 03 C7 08 00 00 00 00 C0 A8 01 91 A4 0F 00") // 192.168.1.145:4004
+			//p1.WriteRawFrame("0D 00 F0 03 C7 08 00 00 00 00 C0 A8 01 91 A4 0F 00") // 192.168.1.145:4004
 
 		case 0x054F: // user IP&port (內網?)  == (0x??C7) ?
 			// [4F][0012][03F0]0C 00 F0 03 4F 05 00 00 00 00 0A 08 09 E6 0B B9
@@ -279,9 +306,8 @@ func handleUser(p1 *Client, buffer []byte) {
 
 		case 0x0740: // 初始訊息? 出擊機體
 			// [0740][0006][03F0]06 00 F0 03 40 07 00 00 00 00
-			p1.WriteFrame(user.GetInfo1Bytes())
+			p1.WriteFrame(p1.GetInfo1Bytes())
 
-			// ----
 		case 0x07E8:
 			// [E8][0006][03F0]06 00 F0 03 E8 07 00 00 00 00
 			p1.WriteRawFrame("0E 00 F0 03 2F 23 85 35 00 00 00 00 00 00 01 00 00 00")
@@ -299,7 +325,6 @@ func handleUser(p1 *Client, buffer []byte) {
 		case 0x0A2E:
 			// [2E][0006][03F0]06 00 F0 03 2E 0A 00 00 00 00
 			p1.WriteRawFrame("D0 00 F0 03 FA 08 85 35 00 00 00 00 00 00 00 F0 00 F0 03 BE 07 4A 1C 00 00 4A 1C 00 00 00 30 75 00 00 63 9C 00 00 0D 33 00 00 01 45 AA 05 80 EC 1E 00 00 30 75 00 00 78 05 00 00 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 E4 07 A4 43 00 00 A4 43 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 ")
-			//p1.WriteRawFrame("CB 01 F0 03 0A 07 85 35 00 00 08 27 00 00 00 03 00 00 00 0C 00 01 00 00 00 CF C4 D1 C7 00 00 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 3A 23 6F 24 00 00 00 00 00 00 00 00 00 00 00 00 5E 34 00 00 0A 00 01 00 00 00 CE E1 C3 FB CB C0 CD F6 D6 AE D2 ED 00 00 00 00 00 01 02 00 00 00 00 00 00 00 00 00 00 00 2F 23 5F 24 00 00 00 00 00 00 00 00 00 00 00 00 DD 13 00 00 0A 00 01 00 00 00 4A 6F 6B 65 00 00 00 00 00 00 00 00 00 00 00 00 00 07 03 00 00 00 1C 00 00 00 00 00 00 00 2B 23 5B 24 00 00 00 00 00 00 00 00 05 00 00 00 49 FB 00 00 0A 00 01 00 00 00 45 6E 64 6A 6F 62 58 58 00 00 00 00 00 00 00 00 00 07 03 00 00 00 00 00 00 00 53 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 4A 1C 00 00 0C 00 01 00 00 00 B0 D6 B0 D6 D4 D9 B4 F2 CE D2 D2 BB B4 CE 00 00 00 07 03 00 00 00 00 00 00 00 6F 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 69 0E 00 00 0A 00 01 00 00 00 CB C4 B4 FA D6 D8 BC DF BC DF 32 30 00 00 00 00 00 02 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 02 00 00 00 05 00 01 00 00 00 B0 A2 C4 B7 C2 DE 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 31 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 4B 06 00 00 0A 00 01 00 00 00 CD B8 D6 A7 B5 C4 BB D8 D2 E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 ")
 			//p1.WriteRawFrame("0A 00 F0 03 1F 00 4F 0F 00 00 4A 3B 40 5C")
 
 		case 0x068E:
@@ -318,15 +343,19 @@ func handleUser(p1 *Client, buffer []byte) {
 			// f.data[6:10]
 
 
-		case 0x083E:
-			p1.WriteRawFrame("CB 01 F0 03 0A 07 85 35 00 00 08 27 00 00 00 03 00 00 00 0C 00 01 00 00 00 CF C4 D1 C7 00 00 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 3A 23 6F 24 00 00 00 00 00 00 00 00 00 00 00 00 5E 34 00 00 0A 00 01 00 00 00 CE E1 C3 FB CB C0 CD F6 D6 AE D2 ED 00 00 00 00 00 01 02 00 00 00 00 00 00 00 00 00 00 00 2F 23 5F 24 00 00 00 00 00 00 00 00 00 00 00 00 DD 13 00 00 0A 00 01 00 00 00 4A 6F 6B 65 00 00 00 00 00 00 00 00 00 00 00 00 00 07 03 00 00 00 1C 00 00 00 00 00 00 00 2B 23 5B 24 00 00 00 00 00 00 00 00 05 00 00 00 49 FB 00 00 0A 00 01 00 00 00 45 6E 64 6A 6F 62 58 58 00 00 00 00 00 00 00 00 00 07 03 00 00 00 00 00 00 00 53 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 4A 1C 00 00 0C 00 01 00 00 00 B0 D6 B0 D6 D4 D9 B4 F2 CE D2 D2 BB B4 CE 00 00 00 07 03 00 00 00 00 00 00 00 6F 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 69 0E 00 00 0A 00 01 00 00 00 CB C4 B4 FA D6 D8 BC DF BC DF 32 30 00 00 00 00 00 02 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 02 00 00 00 05 00 01 00 00 00 B0 A2 C4 B7 C2 DE 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 31 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 4B 06 00 00 0A 00 01 00 00 00 CD B8 D6 A7 B5 C4 BB D8 D2 E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 ")
+		case 0x083E: // 好友列表, 待分析
+			// [083E][0008][03F0]08 00 F0 03 3E 08 00 00 00 00 01 00 (start, p1)
+			// [083E][0008][03F0]08 00 F0 03 3E 08 00 00 00 00 02 00 (p2)
+			p1.WriteFrame(PageFriends)
+			//p1.WriteRawFrame("CB 01 F0 03 0A 07 85 35 00 00 08 27 00 00 00 03 00 00 00 0C 00 01 00 00 00 CF C4 D1 C7 00 00 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 3A 23 6F 24 00 00 00 00 00 00 00 00 00 00 00 00 5E 34 00 00 0A 00 01 00 00 00 CE E1 C3 FB CB C0 CD F6 D6 AE D2 ED 00 00 00 00 00 01 02 00 00 00 00 00 00 00 00 00 00 00 2F 23 5F 24 00 00 00 00 00 00 00 00 00 00 00 00 DD 13 00 00 0A 00 01 00 00 00 4A 6F 6B 65 00 00 00 00 00 00 00 00 00 00 00 00 00 07 03 00 00 00 1C 00 00 00 00 00 00 00 2B 23 5B 24 00 00 00 00 00 00 00 00 05 00 00 00 49 FB 00 00 0A 00 01 00 00 00 45 6E 64 6A 6F 62 58 58 00 00 00 00 00 00 00 00 00 07 03 00 00 00 00 00 00 00 53 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 4A 1C 00 00 0C 00 01 00 00 00 B0 D6 B0 D6 D4 D9 B4 F2 CE D2 D2 BB B4 CE 00 00 00 07 03 00 00 00 00 00 00 00 6F 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 69 0E 00 00 0A 00 01 00 00 00 CB C4 B4 FA D6 D8 BC DF BC DF 32 30 00 00 00 00 00 02 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 02 00 00 00 05 00 01 00 00 00 B0 A2 C4 B7 C2 DE 00 00 00 00 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 31 23 55 24 00 00 00 00 00 00 00 00 00 00 00 00 4B 06 00 00 0A 00 01 00 00 00 CD B8 D6 A7 B5 C4 BB D8 D2 E4 00 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00 00 33 23 55 24 00 00 00 00 00 00 00 00 3A 00 00 00 ")
 
 		case 0x0668: // 初始機格快取?
 			// [0668][0014][03F0]0E 00 F0 03 68 06 00 00 00 00 01 00 00 00 00 00 00 00
 			// 機體清單
-			buf := user.Grid.GetAll()
+			buf := p1.GetAll()
 			Vf(4, "[all][%04d]% 02X\n", len(buf), buf)
 			p1.WriteFrame(buf)
+			//p1.WriteAllPage() // not work
 
 			// ret error
 			p1.WriteRawFrame("48 00 F0 03 63 09 85 35 00 00 04 00 01 00 00 00 06 00 00 00 0E 00 00 00 71 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 50 E8 86 06 83 75 01 00 83 75 01 00")
@@ -346,12 +375,6 @@ func handleUser(p1 *Client, buffer []byte) {
 			// [08B3][0010][03F0]0A 00 F0 03 B3 08 00 00 00 00 00 00 00 00
 			if f.data[8] == byte(0x00) {
 				p1.WriteRawFrame("16 00 F0 03 2C 07 85 35 00 00 E3 07 01 00 11 00 10 00 16 00 25 00 FE 01 00 00")
-
-				// 機格數量(格數, 總數=24+N)
-				//p1.WriteRawFrame(
-				//"08 00 F0 03 08 06 85 35 00 00 " +
-				//"0C 00 09 00 F0 03 18 0B 85 35 00 00 03 00 00")
-				//p1.WriteFrame(user.GetPageCount())
 			}
 			// [B3][0010][03F0]0A 00 F0 03 B3 08 00 00 00 00 F1 63 01 00
 			if f.data[6] == byte(0xF1) {
@@ -361,27 +384,15 @@ func handleUser(p1 *Client, buffer []byte) {
 
 		case 0x05DB:
 			// [05DB][0015][03F0]0F 00 F0 03 DB 05 00 00 00 00 02 00 00 00 00 00 00 00 00
-			//p1.WriteRawFrame("09 00 F0 03 18 0B 85 35 00 00 03 00 00")
 			p1.WriteRawFrame("09 00 F0 03 18 0B 85 35 00 00 1A 00 00")
 
 
 		case 0x073C: // 機格數量(格數, 總數=24+N)
 			// [073C][0006][03F0]06 00 F0 03 3C 07 00 00 00 00
-			p1.WriteFrame(user.GetPageCount())
+			p1.WriteFrame(p1.GetPageCountPack())
 
 		case 0x0621:
-			// [21][0010][03F0]0A 00 F0 03 21 06 00 00 00 00 E1 15 00 00
-			//if f.data[6] == byte(0xE1) && first { // 初始機格
-			//	first = false
-			//	// magic...
-			//	//p1.WriteRawFrame("09 00 01 00 00 00 EF 63 01 00 E2 07 0C 00 0A 00 09 00 01 00 00 00 F0 63 01 00 E2 07 0C 00 0A 00 09 00 01 00 00 00 F1 63 01 00 E2 07 0C 00 0A 00 0C 00 01 00 00 00 ")
-
-			//	// 機體清單
-			//	buf := user.Grid.GetAll()
-			//	Vf(4, "[all][%04d]% 02X\n", len(buf), buf)
-			//	p1.WriteFrame(buf)
-			//}
-
+			// [0621][0010][03F0]0A 00 F0 03 21 06 00 00 00 00 E1 15 00 00
 			// [0621][0010][03F0]0A 00 F0 03 21 06 00 00 00 00 21 1C 00 00
 			if f.data[6] == byte(0x21) {
 				/*p1.WriteRawFrame(
@@ -433,9 +444,17 @@ FE 11 35 00 FF 11 35 00 00 12 35 00 `)
 
 		case 0x095A: // 訓練場 >> 機格page
 			// [5A][0010][03F0]0A 00 F0 03 5A 09 00 00 00 00 01 00 00 00
-			//i := int(f.data[6])
-			//writePage(p1, i)
-			page(p1)
+			if first {
+				first = false
+				p1.WriteAllPage()
+			} else {
+				i := int(f.data[6])
+				p1.WritePage(i)
+			}
+
+		//case 0x0A71: // REQ_GET_USER_UNIT_INFO: req all slot data?
+			// [0A71][0014][03F0]0E 00 F0 03 71 0A 00 00 00 00 1A 14 88 00 00 00 00 00
+			//p1.WriteAllPage() // not work
 
 			// ----
 		case 0x0758: // 好友搜尋
@@ -446,7 +465,9 @@ FE 11 35 00 FF 11 35 00 00 12 35 00 `)
 			userName[0] = f.data[23]
 			copy(userName[1:], f.data[6:6+17])
 			Vf(4, "[user][%d] % 02X", userName[0], userName)
-			p1.WriteFrame(user.GetBytes2(userName))
+			//p1.WriteFrame(user.GetBytes2(userName))
+			buf := BuildUserInfo002Pack(userName, user.SearchExp, user.SearchID)
+			p1.WriteFrame(buf)
 
 		case 0x0847:
 			//p1.WriteRawFrame("0E 00 F0 03 2F 23 85 35 00 00 00 00 00 00 01 00 00 00") // 年月日小时 ?
@@ -577,30 +598,31 @@ FE 11 35 00 FF 11 35 00 00 12 35 00 `)
 			out := eggPool.GetOne()
 			Vln(4, "[egg]", out)
 			p1.WriteFrame(BuildEggPack(out, user.GP))
+			// TODO: save & force update grid
 
 			// --- logout
 		case 0x0A97:
 			// [0A97][0010][03F0]0A 00 F0 03 97 0A 00 00 00 00 00 00 00 00
 			p1.WriteRawFrame("48 00 F0 03 28 07 A9 19 00 00 0C 00 65 00 00 00 C9 00 00 00 2D 01 00 00 91 01 00 00 F5 01 00 00 59 02 00 00 BD 02 00 00 21 03 00 00 85 03 00 00 E9 03 00 00 4D 04 00 00 B1 04 00 00 50 E8 B3 06 50 E8 B3 06 E5 03 00 00 02 00 52 0A")
 
-		//case 0x0A71: // REQ_GET_USER_UNIT_INFO: req all slot data?
-			// [0A71][0014][03F0]0E 00 F0 03 71 0A 00 00 00 00 1A 14 88 00 00 00 00 00
-			//p1.WriteRawFrame("16 00 F0 03 2C 07 98 6D 00 00 E2 07 0C 00 16 00 0F 00 2A 00 22 00 EF 01 00 00")
-			//page(p1)
 
 		case 0x060C: // 設定出擊機體
 			// [060C][0014][03F0]0E 00 F0 03 0C 06 00 00 00 00 [5C 27 30 01 00 00 00 00]
 			// [060C][0014][03F0]0E 00 F0 03 0C 06 00 00 00 00 [19 F3 99 01 00 00 00 00] ???
 			uuid := binary.LittleEndian.Uint64(f.data[6:14])
 			Vf(5, "[setGO]UUID = %02X\n", uuid)
-			user.Grid.SetGoUUID(uuid)
-			bot := user.Grid.GetGo()
+			p1.SetGoUUID(uuid)
+			bot := p1.GetGo()
 			if bot == nil {
-				user.Grid.GetPos(1)
+				p1.GetPos(1)
 			}
 			buf := bot.GetBytes()
 			buf = append(Raw2Byte("72 05 00 00 00 00 00 00 "), buf...)
 			p1.WriteFrame(buf)
+
+		//case 0x05BC: // REQ_DELETE_USERUNIT: 刪除機體
+			// [05BC][0019][03F0]13 00 F0 03 BC 05 00 00 00 00 [0F 00 DE AD 00 00 00 00] 3A 56 00 00 01 換GP
+			// [05BC][0019][03F0]13 00 F0 03 BC 05 00 00 00 00 [0F 00 DE AD 00 00 00 00] 3A 56 00 00 02 換副官F
 
 		default:
 			//Vln(3, "[old]", f)
@@ -613,9 +635,11 @@ func oldFormat(p1 *Client, f Frame) {
 	cmd := uint8(f.cmd & 0xFF)
 	switch cmd {
 	case 0xC7:
+		Vln(3, "[??C7]", f)
 		// == 0x054F ?
 
 	case 0x47:
+		Vln(3, "[??47]", f)
 		p1.WriteRawFrame(
 			"0E 00 F0 03 2F 23 85 35 00 00 00 00 00 00 01 00 00 00 "+
 			"0E 00 F0 03 AD 07 00 00 00 00 8D 23 61 24 4C 00 00 00")
@@ -624,27 +648,6 @@ func oldFormat(p1 *Client, f Frame) {
 		Vln(3, "[????]", f)
 		// 萬用包(時間: 年 月 日 時 分 秒 ms)
 		p1.WriteRawFrame("16 00 F0 03 2C 07 98 6D 00 00  E2 07  0C 00  16 00  0F 00  2A 00  22 00  EF 01 00 00")
-	}
-}
-
-var PageHead = Raw2Byte("9D 03 F0 03 26 08 85 35 00 00 06")
-func page(p1 *Client) {
-	//返回全机库，机库可超10页
-	for i := 0; i < len(user.Grid.buf); i++ {
-		writePage(p1, i)
-	}
-}
-
-func writePage(p1 *Client, page int) {
-	buf := user.Grid.GetPage(page)
-	Vf(5, "[page]%d, % 02X\n", page, buf)
-	if buf != nil {
-		//head := Raw2Byte("9D 03 F0 03 26 08 85 35 00 00 06")
-		head := make([]byte, len(PageHead), len(PageHead))
-		copy(head, PageHead)
-		Vf(4, "[page]%d, % 02X\n", page, head)
-		p1.Write(head)
-		p1.Write(buf)
 	}
 }
 
@@ -664,8 +667,8 @@ func main() {
 
 			err := readData()
 
-			//buf := user.Grid.GetAll()
-			//Vf(4, "[dbg][%d][% 02X]\n", len(buf), buf)
+			//buf := grid.GetPage(1)
+			//Vf(4, "[dbg][%d][%v]\n", len(buf), buf)
 
 			if err != nil {
 				Vf(1, "Read Data Error: %v\n\n", err)
@@ -676,6 +679,9 @@ func main() {
 			case readyCh <- struct{}{}:
 			default:
 			}
+
+			// force update
+			clients.Flush()
 
 		WAIT:
 			_, err = stdin.ReadString('\n')

@@ -128,6 +128,26 @@ var (
 // [24] 合成亮度
 )
 
+var RobotFallBack = &Robot{
+	ID:       0x3AEE,
+	Pos:      1,
+	UUID:     0xDEAF0001,
+	Lock:     false,
+	Active:   true,
+
+	C4:      []uint8{0x4D, 0x30, 0x10, 0x20},
+	Wing:    2,
+	WingLv:  []byte{0x32, 0x32, 0x32, 0x32},
+	Sess:    99999,
+	Lv:      13,
+	Exp:     0,
+	Skill:   0x000124FE,
+	Polish:  50,
+	Color:   []uint16{0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000},
+	Coat:    []uint32{0x00000000, 0x00000000, 0x00000000},
+	Charge:  2000,
+}
+
 type Robot struct {
 	ID     uint16
 	Pos    uint16
@@ -326,57 +346,111 @@ func botPrint25B(a []byte) {
 
 type Grid struct {
 	mx          sync.RWMutex
-	Robot       []*Robot
+	Robot       map[*Robot]*Robot
 	uuid2Robot  map[uint64]*Robot
 	pos2Robot   map[uint16]*Robot
-	//page2Robot  [][6]*Robot
 	GO          uint16
 
-	buf   [][]byte
+	buf    map[uint16][][]byte
 	bufAll []byte // 25 byte * N + header, max(N) = 63
+
+	name      []byte // 1 + 16 Byte
+	GP        uint32 // uint32LE
+	PageCount int
 }
 
 func NewGrid() *Grid {
 	g := &Grid{
 		GO:     1,
-		buf:    make([][]byte, 0),
+
+		buf:    make(map[uint16][][]byte),
 		bufAll: make([]byte, 0),
+
+		GP:        9999999,
+		PageCount: 254,
 	}
-	g.Claer()
+	g.Clear()
+	g.add(RobotFallBack, true)
 
 	return g
 }
 
 func (g *Grid) Add(bot *Robot) {
 	g.mx.Lock()
-	g.add(bot)
+	g.add(bot, false)
 	g.mx.Unlock()
 }
 
-func (g *Grid) add(bot *Robot) {
-	g.Robot = append(g.Robot, bot)
+func (g *Grid) add(bot *Robot, overwrite bool) {
 	uuid := bot.UUID
 	pos := bot.Pos
+	if !overwrite {
+		_, ok := g.uuid2Robot[uuid]
+		if ok {
+			return
+		}
+		_, ok = g.pos2Robot[pos]
+		if ok {
+			return
+		}
+		_, ok = g.Robot[bot]
+		if ok {
+			return
+		}
+	}
 	g.uuid2Robot[uuid] = bot
 	g.pos2Robot[pos] = bot
+	g.Robot[bot] = bot
 }
 
-func (g *Grid) AddPos(bot *Robot, pos int) {
+func (g *Grid) del(bot *Robot) {
+	uuid := bot.UUID
+	pos := bot.Pos
+
+	_, ok := g.uuid2Robot[uuid]
+	if !ok {
+		return
+	}
+	_, ok = g.pos2Robot[pos]
+	if !ok {
+		return
+	}
+	_, ok = g.Robot[bot]
+	if !ok {
+		return
+	}
+
+	delete(g.uuid2Robot, uuid)
+	delete(g.pos2Robot, pos)
+	delete(g.Robot, bot)
+}
+
+func (g *Grid) SetPos(bot *Robot, pos int) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
 	bot.Pos = uint16(pos)
-	g.add(bot)
+	g.add(bot, true)
 }
 
-func (g *Grid) Claer() {
+func (g *Grid) DelPos(pos int) {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	g.Robot = make([]*Robot, 0)
+	bot, ok := g.pos2Robot[uint16(pos)]
+	if !ok {
+		return
+	}
+	g.del(bot)
+}
+
+func (g *Grid) Clear() {
+	g.mx.Lock()
+	defer g.mx.Unlock()
+
+	g.Robot = make(map[*Robot]*Robot)
 	g.uuid2Robot = make(map[uint64]*Robot)
 	g.pos2Robot = make(map[uint16]*Robot)
-	//g.page2Robot = make([][6]*Robot, 0, 4)
 }
 
 func (g *Grid) SetGoUUID(uuid uint64) {
@@ -388,7 +462,10 @@ func (g *Grid) SetGoUUID(uuid uint64) {
 		return // UUID not found
 	}
 
-	act := g.pos2Robot[g.GO]
+	act, ok := g.pos2Robot[g.GO]
+	if !ok {
+		return
+	}
 	act.Active = false
 
 	bot.Active = true
@@ -404,7 +481,10 @@ func (g *Grid) SetGoPos(pos int) {
 		return // pos not found
 	}
 
-	act := g.pos2Robot[g.GO]
+	act, ok := g.pos2Robot[g.GO]
+	if !ok {
+		return
+	}
 	act.Active = false
 
 	bot.Active = true
@@ -423,8 +503,8 @@ func (g *Grid) GetPos(pos int) *Robot {
 }
 
 func (g *Grid) GetGo() *Robot {
-	g.mx.Lock()
-	defer g.mx.Unlock()
+	g.mx.RLock()
+	defer g.mx.RUnlock()
 
 	return g.pos2Robot[g.GO]
 }
@@ -433,25 +513,17 @@ func (g *Grid) BuildCached() {
 	g.mx.Lock()
 	defer g.mx.Unlock()
 
-	g.buf = make([][]byte, 0)
-
-	allbuf := make([][]byte, 0)
+	allbuf := make(map[uint16][][]byte)
 	for _, bot := range g.Robot {
 		buf := bot.GetBytes()
 		botPrint(buf)
-		allbuf = append(allbuf, buf)
-	}
-
-	for i := 0; i < len(allbuf); i += 6 {
-		pagebuf := make([]byte, 0, 153*6)
-		for j := 0; j < 6; j++ {
-			if i+j >= len(allbuf) {
-				break
-			}
-			pagebuf = append(pagebuf, allbuf[i+j]...)
+		page := (bot.Pos - 1) / 6
+		if allbuf[page] == nil {
+			allbuf[page] = make([][]byte, 0, 6)
 		}
-		g.buf = append(g.buf, pagebuf)
+		allbuf[page] = append(allbuf[page], buf)
 	}
+	g.buf = allbuf
 }
 
 func (g *Grid) BuildCachedAll() {
@@ -464,10 +536,13 @@ func (g *Grid) BuildCachedAll() {
 	}
 	subbuf := make([]byte, 0, 7+25*size)
 	subbuf = append(subbuf, []byte{0xCE, 0x05, 0x85, 0x35, 0x00, 0x00, byte(size)}...)
-	for idx, bot := range g.Robot {
-		if idx > 63 {
+	count := 0
+	for _, bot := range g.Robot {
+		if count > 63 {
 			break
 		}
+		count += 1
+
 		buf := bot.GetBytes2()
 		botPrint25B(buf)
 		subbuf = append(subbuf, buf...)
@@ -475,13 +550,16 @@ func (g *Grid) BuildCachedAll() {
 	g.bufAll = subbuf
 }
 
-func (g *Grid) GetPage(p int) []byte {
+func (g *Grid) GetPage(p int) [][]byte {
 	g.mx.RLock()
 	defer g.mx.RUnlock()
-	if p < len(g.buf) {
-		return g.buf[p]
-	}
-	return nil
+	return g.buf[uint16(p)]
+}
+
+func (g *Grid) GetAllPage() map[uint16][][]byte {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+	return g.buf
 }
 
 func (g *Grid) GetAll() []byte {
@@ -490,6 +568,72 @@ func (g *Grid) GetAll() []byte {
 
 	return g.bufAll
 }
+
+func (g *Grid) String() string {
+	g.mx.RLock()
+	defer g.mx.RUnlock()
+	str := fmt.Sprintf("Name: [% 02X], GP: %d, PageCount: %d, Go: %04X\n", g.name, g.GP, g.PageCount, g.GO)
+	return str
+}
+
+func (u *Grid) SetName(name string) {
+	u.mx.Lock()
+	defer u.mx.Unlock()
+
+	buf := []byte(name)
+	if len(buf) > 16 {
+		buf = buf[0:16]
+	}
+
+	nameBuf := make([]byte, 17, 17)
+	nameBuf[0] = uint8(len(buf))
+	copy(nameBuf[1:], buf)
+
+	u.name = nameBuf
+}
+
+func (u *Grid) GetInfo1Bytes() []byte {
+	u.mx.RLock()
+	defer u.mx.RUnlock()
+
+	a := make([]byte, len(UserInfo001), len(UserInfo001))
+	copy(a, UserInfo001)
+
+	// Name
+	copy(a[8:25], u.name)
+
+	bot := u.GetGo()
+	if bot != nil {
+		buf := bot.GetBytes()
+		copy(a[81:81+len(buf)], buf)
+	}
+
+	// GP
+	binary.LittleEndian.PutUint32(a[55:59], u.GP)
+
+	return a
+}
+
+func (u *Grid) GetPageCountPack() []byte {
+	u.mx.RLock()
+	defer u.mx.RUnlock()
+
+	buf := Raw2Byte("08 06 85 35 00 00 " +
+		"0C 00 " +
+		"09 00 F0 03 18 0B 85 35 00 00 03 00 00")
+
+	N := u.PageCount - 4
+	if N < 0 {
+		N = 0
+	}
+	N = N * 6
+
+	binary.LittleEndian.PutUint16(buf[6:8], uint16(N))
+
+	return buf
+}
+
+
 
 var (
 	UserInfo001 = Raw2Byte("A6 06 85 35 00 00 00 00 " +
@@ -518,82 +662,7 @@ var (
 // [118:120] 出擊機體ID
 )
 
-type User struct {
-	Mx        sync.RWMutex
-
-	GO        int // start from 1
-
-	name      []byte // 1 + 16 Byte
-	GP        uint32 // uint32LE
-	SearchID  uint16
-	SearchExp uint32
-	PageCount int
-
-	Grid      *Grid
-}
-
-func NewUser() *User {
-	u := &User{
-		GP:        9999999,
-		GO:        1,
-		SearchID:  0x428F,
-		SearchExp: 0,
-		PageCount: 254,
-	}
-	u.SetName("Jack")
-	u.Grid = NewGrid()
-	return u
-}
-
-func (u *User) String() string {
-	u.Mx.RLock()
-	defer u.Mx.RUnlock()
-	str := fmt.Sprintf("Name: [% 02X], GP: %d, GO: %d, SearchID: %04X, SearchExp: %d, PageCount: %d\n", u.name, u.GP, u.GO, u.SearchID, u.SearchExp, u.PageCount)
-	return str
-}
-
-func (u *User) SetName(name string) {
-	u.Mx.Lock()
-	defer u.Mx.Unlock()
-
-	buf := []byte(name)
-	if len(buf) > 16 {
-		buf = buf[0:16]
-	}
-
-	nameBuf := make([]byte, 17, 17)
-	nameBuf[0] = uint8(len(buf))
-	copy(nameBuf[1:], buf)
-
-	u.name = nameBuf
-}
-
-func (u *User) GetInfo1Bytes() []byte {
-	u.Mx.RLock()
-	defer u.Mx.RUnlock()
-
-	a := make([]byte, len(UserInfo001), len(UserInfo001))
-	copy(a, UserInfo001)
-
-	// Name
-	copy(a[8:25], u.name)
-
-	bot := u.Grid.GetGo()
-	if bot != nil {
-		buf := bot.GetBytes()
-		copy(a[81:81+len(buf)], buf)
-	}
-
-	// GP
-	binary.LittleEndian.PutUint32(a[55:59], u.GP)
-
-	return a
-}
-
-func (u *User) GetBytes2(name []byte) []byte {
-	u.Mx.RLock()
-	defer u.Mx.RUnlock()
-
+func BuildUserInfo002Pack(name []byte, exp uint32, id uint16) []byte {
 	a := make([]byte, len(UserInfo002), len(UserInfo002))
 	copy(a, UserInfo002)
 
@@ -601,29 +670,10 @@ func (u *User) GetBytes2(name []byte) []byte {
 	copy(a[10:27], name)
 
 	// EXP
-	binary.LittleEndian.PutUint32(a[68:72], u.SearchExp)
+	binary.LittleEndian.PutUint32(a[68:72], exp)
 
 	// ID
-	binary.LittleEndian.PutUint16(a[118:120], u.SearchID)
+	binary.LittleEndian.PutUint16(a[118:120], id)
 
 	return a
-}
-
-func (u *User) GetPageCount() []byte {
-	u.Mx.RLock()
-	defer u.Mx.RUnlock()
-
-	buf := Raw2Byte("08 06 85 35 00 00 " +
-		"0C 00 " +
-		"09 00 F0 03 18 0B 85 35 00 00 03 00 00")
-
-	N := u.PageCount - 4
-	if N < 0 {
-		N = 0
-	}
-	N = N * 6
-
-	binary.LittleEndian.PutUint16(buf[6:8], uint16(N))
-
-	return buf
 }

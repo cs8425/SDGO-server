@@ -3,7 +3,7 @@ package main
 import (
 //	"flag"
 //	"log"
-//	"fmt"
+	"fmt"
 //	"net"
 
 //	"io"
@@ -13,8 +13,39 @@ import (
 	"strconv"
 	"bufio"
 //	"time"
-//	"sync"
+	"sync"
 )
+
+// for parse config only
+type UserInfo struct {
+	Mx        sync.RWMutex
+
+	SearchID  uint16
+	SearchExp uint32
+
+	Name      string
+	GP        uint32
+	PageCount int
+	GO        int
+}
+
+func NewUserInfo() *UserInfo {
+	u := &UserInfo{
+		SearchID:  0x428F,
+		SearchExp: 0,
+		GP:        9999999,
+		PageCount: 254,
+		GO:        1,
+	}
+	return u
+}
+
+func (u *UserInfo) String() string {
+	u.Mx.RLock()
+	defer u.Mx.RUnlock()
+	str := fmt.Sprintf("Name: [% 02X], GP: %d, PageCount: %d, Go: %d, SearchID: %04X, SearchExp: %d\n", u.Name, u.GP, u.PageCount, u.GO, u.SearchID, u.SearchExp)
+	return str
+}
 
 func readData() (error) {
 	lines, err := readFile(*userData)
@@ -23,7 +54,7 @@ func readData() (error) {
 		return err
 	}
 
-	grid2 := NewGrid()
+	grid.Clear()
 
 	idx := 1
 	for _, line := range lines {
@@ -129,6 +160,12 @@ func readData() (error) {
 			continue
 		}
 
+		if rid == 0x0000 {
+			grid.DelPos(idx)
+			idx += 1
+			continue
+		}
+
 		bot := NewBot(rid)
 		bot.UUID = uint64(idx) + 0xADDE0000
 		bot.Pos = uint16(idx)
@@ -149,17 +186,19 @@ func readData() (error) {
 		//Vf(7, "[dbg][open]%v, %X", bot, bot.GetBytes(idx))
 		idx += 1
 
-		grid2.Add(bot)
+		grid.Add(bot)
 	}
 
-	grid2.SetGoPos(user.GO)
-	grid2.BuildCached()
-	grid2.BuildCachedAll()
+	grid.SetName(user.Name)
+	grid.GP = user.GP
+	grid.PageCount = user.PageCount
+	grid.SetGoPos(int(user.GO))
+	grid.BuildCached()
+	grid.BuildCachedAll()
 
-	user.Grid = grid2
-
-	Vln(4, "[dbg][grid]", len(user.Grid.Robot), len(user.Grid.buf))
+	Vln(4, "[dbg][grid]", len(grid.Robot), len(grid.buf), grid.GetGo())
 	Vln(4, "[dbg][user]", user)
+
 	return nil
 }
 
@@ -171,7 +210,10 @@ func readUser(d []string) {
 	val := d[2]
 	switch d[1] {
 	case "Name":
-		user.SetName(val)
+		//user.SetName(val)
+		user.Mx.Lock()
+		user.Name = val
+		user.Mx.Unlock()
 
 	case "GP":
 		tmp, err := strconv.ParseUint(val, 10, 32)
@@ -385,9 +427,11 @@ func readExtra() (error) {
 				copy(UserInfo002, v)
 				Vf(3, "[extra]update %v[%d]\n", k, len(v))
 			}
-		case "PageHead":
-			copy(PageHead, v)
-			Vf(3, "[extra]update %v[%d]\n", k, len(v))
+		case "PageFriends":
+			if len(v) == len(PageFriends) {
+				copy(PageFriends, v)
+				Vf(3, "[extra]update %v[%d]\n", k, len(v))
+			}
 		}
 	}
 
