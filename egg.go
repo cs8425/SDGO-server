@@ -26,12 +26,12 @@ type EggPool struct {
 
 type EggItem struct {
 	P    int  // 1% = 1000
-	ID   uint16
+	ID   HexBotID
 	C    uint8 // C2~C4
 }
 
 func (i *EggItem) String() string {
-	return fmt.Sprintf("[id] %X, [C] %d, [P] %0.3f", i.ID, i.C, float32(i.P) / 1000.0)
+	return fmt.Sprintf("[id] %v, [C] %d, [P] %0.3f", i.ID, i.C, float32(i.P) / 1000.0)
 }
 
 func NewEggPool() (*EggPool) {
@@ -84,7 +84,7 @@ func (e *EggPool) Add(id uint16, c uint8, p int) {
 	defer e.mx.Unlock()
 
 	item := &EggItem{
-		ID: id,
+		ID: HexBotID(id),
 		C: c,
 		P: p,
 	}
@@ -117,8 +117,8 @@ func BuildEggPack(it *EggItem, gp uint32, pos uint16) ([]byte) {
 	"EE 3A 00 00 5d 87 07 00 00 00 00 00 " +
 	"0c 00 01 00 00 00 00 00 00 fa 44 00 00")
 
-	binary.LittleEndian.PutUint16(buf[6:8], it.ID)
-	binary.LittleEndian.PutUint16(buf[27:29], it.ID)
+	binary.LittleEndian.PutUint16(buf[6:8], uint16(it.ID))
+	binary.LittleEndian.PutUint16(buf[27:29], uint16(it.ID))
 	buf[26] = it.C
 	binary.LittleEndian.PutUint16(buf[39:41], pos)
 

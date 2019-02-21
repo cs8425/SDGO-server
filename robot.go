@@ -377,7 +377,7 @@ func (g *Grid) Set(bot *Robot) {
 	g.mx.Unlock()
 }
 
-func (g *Grid) AddNew(id uint16, c uint8) *Robot {
+func (g *Grid) AddNew(id HexBotID, c uint8) *Robot {
 	pos := uint16(0)
 	uuid := HexUint64(0xDEAF0000)
 	end := uint16(6*g.PageCount)
@@ -395,7 +395,7 @@ func (g *Grid) AddNew(id uint16, c uint8) *Robot {
 	}
 
 	bot := &Robot{
-		ID:       HexBotID(id),
+		ID:       id,
 		Pos:      pos,
 		UUID:     uuid,
 		Lock:     false,
@@ -675,6 +675,15 @@ func (u *Grid) GetInfo1Bytes() []byte {
 	binary.LittleEndian.PutUint32(a[55:59], u.GP)
 
 	return a
+}
+
+func (u *Grid) SetPageCount(count int) {
+	u.mx.Lock()
+	defer u.mx.Unlock()
+
+	if len(u.robot) <= count * 6 {
+		u.PageCount = count
+	}
 }
 
 func (u *Grid) GetPageCountPack() []byte {
