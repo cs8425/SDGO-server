@@ -27,7 +27,7 @@ var (
 	extraData   = flag.String("ex", "extra.txt", "extra data for testing")
 	eggPoolData = flag.String("egg", "egg.txt", "egg pool data")
 
-	webAddr = flag.String("web", ":8080", "http server port")
+	webAddr = flag.String("web", ":8080", "http server port, empty means not to start http server")
 )
 
 var user = NewUserInfo()

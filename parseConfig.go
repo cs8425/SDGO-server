@@ -146,7 +146,7 @@ func NewUserInfo() *UserInfo {
 func (u *UserInfo) String() string {
 	u.Mx.RLock()
 	defer u.Mx.RUnlock()
-	str := fmt.Sprintf("Name: [% 02X], GP: %d, PageCount: %d, Go: %d, SearchID: %v, SearchExp: %d\n", u.Name, u.GP, u.PageCount, u.GO, u.SearchID, u.SearchExp)
+	str := fmt.Sprintf("Name: %v, GP: %d, PageCount: %d, Go: %d, SearchID: %v, SearchExp: %d\n", u.Name, u.GP, u.PageCount, u.GO, u.SearchID, u.SearchExp)
 	return str
 }
 
