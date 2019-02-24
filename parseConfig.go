@@ -540,10 +540,9 @@ func dumpRobot() string {
 			out.WriteString("0000\n")
 		}
 		i = b.Pos + 1
-		id := (b.ID >> 8) | ((b.ID & 0xFF) << 8)
 		color := fmt.Sprintf("%02X\t%06X\t%06X\t%06X\t%06X\t%06X\t%06X", b.Polish, b.Color[0].DumpColor(), b.Color[1].DumpColor(), b.Color[2].DumpColor(), b.Color[3].DumpColor(), b.Color[4].DumpColor(), b.Color[5].DumpColor())
 		coat := fmt.Sprintf("%08X\t%08X\t%08X", b.Coat[0], b.Coat[1], b.Coat[2])
-		str := fmt.Sprintf("%v\t%02X\t%d\t%02X\t%d\t%d\t%d\t%08X\t%v\t%v\n", id, b.C4, b.Wing, b.WingLv, b.Lv, b.Exp, b.Sess, b.Skill, color, coat)
+		str := fmt.Sprintf("%v\t%02X\t%d\t%02X\t%d\t%d\t%d\t%08X\t%v\t%v\n", b.ID, b.C4, b.Wing, b.WingLv, b.Lv, b.Exp, b.Sess, b.Skill, color, coat)
 		Vf(5, "[save line]%v", str)
 		out.WriteString(str)
 	}
