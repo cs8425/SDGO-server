@@ -321,7 +321,25 @@ func handleUser(p1 *Client, buffer []byte) {
 
 		case 0x0A35:
 			// [35][0006][03F0]06 00 F0 03 35 0A 00 00 00 00
-			p1.WriteRawFrame("3A 00 F0 03 01 09 85 35 00 00 11 01 1F 01 20 01 1E 01 10 01 12 01 39 01 13 01 1D 01 00 02 01 02 03 02 2A 01 0F 01 02 01 03 01 04 01 05 01 06 01 2F 01 00 00 00 00 00 00 00 00 00 00 00 00")
+			if user.KeyBind == nil {
+				p1.WriteRawFrame("3A 00 F0 03 01 09 85 35 00 00 11 01 1F 01 20 01 1E 01 10 01 12 01 39 01 2A 01 1D 01 00 02 01 02 03 02 02 02 0F 01 02 01 03 01 04 01 05 01 06 01 2E 01 00 00 00 00 00 00 00 00 00 00 00 00")
+			} else {
+				p1.WriteFrame(append(Raw2Byte("01 09 85 35 00 00"), user.KeyBind...))
+			}
+
+		case 0x062C:
+			// [062C][0058][03F0]3A 00 F0 03 2C 06 00 00 00 00 11 01 1F 01 20 01 1E 01 10 01 12 01 39 01 2A 01 1D 01 00 02 01 02 03 02 02 02 0F 01 02 01 03 01 04 01 05 01 06 01 2F 01 00 00 00 00 00 00 00 00 00 00 00 00
+			keys := f.data[6:]
+			if len(keys) == 52 {
+				k := make([]byte, len(keys), len(keys))
+				copy(k, keys)
+
+				user.Mx.Lock()
+				user.KeyBind = k
+				user.Mx.Unlock()
+				p1.WriteFrame(append(Raw2Byte("01 09 85 35 00 00"), user.KeyBind...))
+			}
+			Vf(4, "[keys]%d, [%02X]\n", len(keys), keys)
 
 		case 0x0A2E:
 			// [2E][0006][03F0]06 00 F0 03 2E 0A 00 00 00 00

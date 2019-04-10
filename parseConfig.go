@@ -130,6 +130,8 @@ type UserInfo struct {
 	GP        uint32
 	PageCount int
 	GO        int
+
+	KeyBind   HexByte
 }
 
 func NewUserInfo() *UserInfo {
@@ -363,6 +365,14 @@ func readUser(d []string) {
 			user.Mx.Unlock()
 		}
 
+	case "KeyBind":
+		buf, err := hex.DecodeString(val)
+		if err == nil && len(buf) == 52 {
+			user.Mx.Lock()
+			user.KeyBind = buf
+			user.Mx.Unlock()
+		}
+
 	default:
 		return
 	}
@@ -563,6 +573,9 @@ func dumpUser() string {
 
 	out.WriteString("\n!!!\tGO\t")
 	out.WriteString(fmt.Sprintf("%d", grid.GO))
+
+	out.WriteString("\n!!!\tKeyBind\t")
+	out.WriteString(fmt.Sprintf("%02X", []byte(user.KeyBind)))
 
 	out.WriteString("\n!!!\tSearchID\t")
 	out.WriteString(fmt.Sprintf("%04X", user.SearchID))
