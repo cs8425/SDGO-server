@@ -44,7 +44,7 @@ case "$NAME" in
 	rungo linux mipsle 7 "$@"
 ;;
 'mips')
-	rungo linux mipsle 7 "$@"
+	rungo linux mips 7 "$@"
 ;;
 
 esac
